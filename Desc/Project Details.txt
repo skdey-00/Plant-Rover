@@ -1,0 +1,18 @@
+Materials: 
+	Drive Build
+	- 4 BO Motors
+	- 4 Traction wheels
+	- 1 L298N Motor Driver
+	- 1 Servo Motor (Rotation of ESP32 CAM and Spray Bottles)
+	- 1 ESP32
+
+	Spraying Mech
+	- 2 Servo Motors (Trigger Mech for Spray bottles)
+	- ESP32 CAM
+
+Description 
+An ESP32 is connected to 4 BO Motors an 3 Servo motors; forming a basic 4 wheel drive which will be remote controlled through a website hosted on the ESP32's locally hosted wifi junction; on the very same website, i want a joystick/d-pad styled control system for one of the servos, the other 2 servos should move a preset degree of angle and return to home position, to trigger a spray bottle.
+https://youtu.be/WIimV5lZlQ4?si=CoUPYtt1WCNQMoWb : kind of like shown in this video
+
+I want to create an automated rover styled bot who's purpose is to detect whether or not a plant has either fungus or pests; using an esp32cam to create a live stream and processing the video feed locally on my system (basically making my system act as the cloud); now if possible i would love for the sprays to be configured to automatically spray when the ESP32 Wroom module get's a signal that 'fungus' or 'pesticide' is detected, but as a failsafe i also want manual trigger buttons on my website dashboard and perhaps to be able to view the live feed of the cam on my dashboard, and after the processing a fungus/pest is detected; a message on the site, so the user can manually trigger it; keep 2 renditions; automatic spraying mode and manual;  so in case my automatic fails, i have a failsafe
+

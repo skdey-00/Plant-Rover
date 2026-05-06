@@ -1,0 +1,52 @@
+# Virtual environment
+rover-train/
+env/
+venv/
+ENV/
+*.egg-info/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg
+
+# Dataset - ignore image/label contents but keep structure
+plant_dataset/raw/*/*
+!plant_dataset/raw/*/.gitkeep
+plant_dataset/images/*/*
+plant_dataset/labels/*/*
+!plant_dataset/images/train/.gitkeep
+!plant_dataset/images/val/.gitkeep
+!plant_dataset/labels/train/.gitkeep
+!plant_dataset/labels/val/.gitkeep
+
+# Training runs
+plant_rover/
+runs/
+runs/
+
+# Models (trained)
+*.pt
+*.onnx
+!*.placeholder
+
+# Verification output
+models/verification_output/*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ultralytics cache
+.ultralytics/

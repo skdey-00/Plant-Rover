@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plant Rover Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border-color: #30363d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent-green: #3fb950;
+            --accent-blue: #58a6ff;
+            --accent-red: #f85149;
+            --accent-yellow: #d29922;
+            --accent-orange: #db6d28;
+            --accent-purple: #a371f7;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Top Bar */
+        .top-bar {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 60px;
+        }
+
+        .logo {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--accent-green);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo span {
+            color: var(--text-primary);
+        }
+
+        .status-section {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--accent-red);
+            transition: background 0.3s;
+        }
+
+        .status-dot.connected {
+            background: var(--accent-green);
+            box-shadow: 0 0 10px var(--accent-green);
+        }
+
+        .status-dot.connecting {
+            background: var(--accent-yellow);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .mode-toggle {
+            display: flex;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        .mode-btn {
+            padding: 8px 20px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .mode-btn.active {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        /* Main Layout */
+        .main-container {
+            display: grid;
+            grid-template-columns: 280px 1fr 280px;
+            gap: 1px;
+            height: calc(100vh - 60px);
+            background: var(--border-color);
+        }
+
+        .panel {
+            background: var(--bg-primary);
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .panel-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Left Panel - Controls */
+        .joystick-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        #joystick-zone {
+            width: 200px;
+            height: 200px;
+            background: var(--bg-secondary);
+            border-radius: 50%;
+            border: 2px solid var(--border-color);
+            position: relative;
+        }
+
+        .joystick-label {
+            margin-top: 10px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .servo-section {
+            margin-top: 20px;
+        }
+
+        .servo-dpad {
+            display: grid;
+            grid-template-areas:
+                ". up ."
+                "left center right"
+                ". down .";
+            gap: 8px;
+            width: 180px;
+            margin: 0 auto;
+        }
+
+        .dpad-btn {
+            width: 50px;
+            height: 50px;
+            border: none;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.15s;
+            border: 1px solid var(--border-color);
+        }
+
+        .dpad-btn:hover {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+        }
+
+        .dpad-btn:active {
+            transform: scale(0.95);
+        }
+
+        .dpad-btn.up { grid-area: up; }
+        .dpad-btn.down { grid-area: down; }
+        .dpad-btn.left { grid-area: left; }
+        .dpad-btn.right { grid-area: right; }
+        .dpad-btn.center {
+            grid-area: center;
+            background: var(--bg-secondary);
+            font-size: 0.8rem;
+        }
+
+        /* Center Panel - Video */
+        .video-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 15px;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            aspect-ratio: 4/3;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+
+        #stream {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .video-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .overlay-badge {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.8rem;
+        }
+
+        /* Detection Alert Banner */
+        .detection-banner {
+            width: 100%;
+            max-width: 800px;
+            margin-top: 15px;
+            padding: 15px 20px;
+            border-radius: 10px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            display: none;
+            align-items: center;
+            gap: 15px;
+            animation: slideIn 0.3s ease;
+        }
+
+        .detection-banner.active {
+            display: flex;
+            border-color: var(--accent-orange);
+            background: rgba(219, 109, 40, 0.1);
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .detection-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--accent-orange);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        .detection-info {
+            flex: 1;
+        }
+
+        .detection-label {
+            font-weight: 600;
+            font-size: 1rem;
+            color: var(--accent-orange);
+        }
+
+        .detection-confidence {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        /* Right Panel - Spray Controls */
+        .spray-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .spray-btn {
+            padding: 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .spray-btn:active {
+            transform: scale(0.98);
+        }
+
+        .spray-btn.left {
+            background: linear-gradient(135deg, var(--accent-blue), #4c8eda);
+            color: white;
+        }
+
+        .spray-btn.right {
+            background: linear-gradient(135deg, var(--accent-purple), #8a5cc0);
+            color: white;
+        }
+
+        .spray-btn.both {
+            background: linear-gradient(135deg, var(--accent-orange), #c95d1f);
+            color: white;
+        }
+
+        .spray-btn:disabled {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            cursor: not-allowed;
+        }
+
+        /* Auto Spray Status */
+        .auto-spray-status {
+            margin-top: 20px;
+            padding: 15px;
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+        }
+
+        .auto-spray-title {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-light {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+            transition: all 0.3s;
+        }
+
+        .status-light.manual {
+            background: var(--text-secondary);
+        }
+
+        .status-light.auto-idle {
+            background: var(--accent-yellow);
+            box-shadow: 0 0 10px var(--accent-yellow);
+        }
+
+        .status-light.auto-active {
+            background: var(--accent-green);
+            box-shadow: 0 0 15px var(--accent-green);
+            animation: glow 1s infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 15px var(--accent-green); }
+            50% { box-shadow: 0 0 25px var(--accent-green); }
+        }
+
+        .status-text {
+            font-size: 0.9rem;
+        }
+
+        /* IP Config */
+        .config-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: var(--bg-tertiary);
+            border-radius: 10px;
+        }
+
+        .config-title {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+        }
+
+        .config-input {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+        }
+
+        .config-input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        .config-btn {
+            width: 100%;
+            padding: 10px;
+            background: var(--accent-green);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .config-btn:hover {
+            background: #3ea848;
+        }
+
+        /* PC Offline Warning Banner */
+        .pc-offline-banner {
+            width: 100%;
+            max-width: 800px;
+            margin-top: 10px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            background: rgba(248, 81, 73, 0.15);
+            border: 1px solid var(--accent-red);
+            display: none;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .pc-offline-banner.active {
+            display: flex;
+            animation: pulse-border 2s infinite;
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { border-color: var(--accent-red); }
+            50% { border-color: #ff8a80; }
+        }
+
+        .pc-offline-icon {
+            font-size: 1.2rem;
+        }
+
+        .pc-offline-text {
+            font-size: 0.9rem;
+            color: var(--accent-red);
+            font-weight: 500;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .main-container {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto auto;
+                height: auto;
+            }
+
+            .video-container {
+                max-width: 100%;
+            }
+        }
+
+        /* Loading state */
+        .video-loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--accent-green);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Top Bar -->
+    <div class="top-bar">
+        <div class="logo">
+            🌱 <span>Plant Rover</span>
+        </div>
+        <div class="status-section">
+            <div class="connection-status">
+                <div class="status-dot" id="wsStatus"></div>
+                <span id="wsStatusText">Disconnected</span>
+            </div>
+            <div class="mode-toggle">
+                <button class="mode-btn active" id="manualBtn" onclick="setMode('manual')">MANUAL</button>
+                <button class="mode-btn" id="autoBtn" onclick="setMode('auto')">AUTO</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Left Panel -->
+        <div class="panel">
+            <div class="panel-title">Drive Controls</div>
+
+            <div class="joystick-container">
+                <div id="joystick-zone"></div>
+                <div class="joystick-label">Drive - Drag to move</div>
+            </div>
+
+            <div class="servo-section">
+                <div class="panel-title" style="margin-bottom: 10px;">Servo 1 Control</div>
+                <div class="servo-dpad">
+                    <button class="dpad-btn up" onmousedown="servoControl('up')" ontouchstart="servoControl('up')">▲</button>
+                    <button class="dpad-btn left" onmousedown="servoControl('left')" ontouchstart="servoControl('left')">◀</button>
+                    <button class="dpad-btn center" id="servoCenter">90°</button>
+                    <button class="dpad-btn right" onmousedown="servoControl('right')" ontouchstart="servoControl('right')">▶</button>
+                    <button class="dpad-btn down" onmousedown="servoControl('down')" ontouchstart="servoControl('down')">▼</button>
+                </div>
+                <div style="text-align: center; margin-top: 10px; font-size: 0.85rem; color: var(--text-secondary);">
+                    Position: <span id="servoPos">90</span>°
+                </div>
+            </div>
+
+            <!-- IP Config (for users to customize) -->
+            <div class="config-section">
+                <div class="config-title">Configuration</div>
+                <input type="text" class="config-input" id="roverIp" value="192.168.4.1" placeholder="Rover IP">
+                <input type="text" class="config-input" id="pcIp" value="" placeholder="PC IP (auto-detected)">
+                <button class="config-btn" onclick="reconnect()">Reconnect</button>
+            </div>
+        </div>
+
+        <!-- Center Panel - Video -->
+        <div class="panel video-panel">
+            <div class="video-container">
+                <div class="video-loading" id="videoLoading">
+                    <div class="spinner"></div>
+                </div>
+                <img id="stream" src="" alt="Rover Camera" style="display: none;" onload="videoLoaded()" onerror="videoError()">
+                <div class="video-overlay">
+                    <div class="overlay-badge" id="fpsBadge">FPS: --</div>
+                    <div class="overlay-badge" id="modeBadge">MODE: MANUAL</div>
+                </div>
+            </div>
+
+            <!-- Detection Alert Banner -->
+            <div class="detection-banner" id="detectionBanner">
+                <div class="detection-icon">⚠</div>
+                <div class="detection-info">
+                    <div class="detection-label" id="detectionLabel">--</div>
+                    <div class="detection-confidence" id="detectionConf">Confidence: --</div>
+                </div>
+            </div>
+
+            <!-- PC Offline Warning Banner -->
+            <div class="pc-offline-banner" id="pcOfflineBanner">
+                <div class="pc-offline-icon">⚠</div>
+                <div class="pc-offline-text">PC OFFLINE - Auto spray disabled</div>
+            </div>
+        </div>
+
+        <!-- Right Panel -->
+        <div class="panel">
+            <div class="panel-title">Spray Controls</div>
+
+            <div class="spray-section">
+                <button class="spray-btn left" onclick="sprayControl(2)">
+                    🌿 Spray Left
+                </button>
+                <button class="spray-btn right" onclick="sprayControl(3)">
+                    🌿 Spray Right
+                </button>
+                <button class="spray-btn both" onclick="sprayControl('both')">
+                    💨 Spray Both
+                </button>
+            </div>
+
+            <div class="auto-spray-status">
+                <div class="auto-spray-title">Auto-Spray Status</div>
+                <div class="status-indicator">
+                    <div class="status-light manual" id="autoSprayLight"></div>
+                    <span class="status-text" id="autoSprayText">Manual Mode</span>
+                </div>
+            </div>
+
+            <div style="margin-top: 20px; font-size: 0.85rem; color: var(--text-secondary);">
+                <div style="margin-bottom: 10px;"><strong>Quick Stats</strong></div>
+                <div>Detections: <span id="detectionCount">0</span></div>
+                <div>Sprays Triggered: <span id="sprayCount">0</span></div>
+                <div>Uptime: <span id="uptime">00:00</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- nipple.js for virtual joystick -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
+
+    <script>
+        // ============================================================
+        // Configuration
+        // ============================================================
+        let ROVER_IP = '192.168.4.1';
+        let PC_IP = '';
+        let WS_PORT = 81;
+        let HTTP_PORT = 5000;
+
+        // ============================================================
+        // State
+        // ============================================================
+        let ws = null;
+        let eventSource = null;
+        let currentMode = 'manual'; // 'manual' or 'auto'
+        let servoAngle = 90;
+        let detectionCount = 0;
+        let sprayCount = 0;
+        let detectionActive = false;
+        let pcOffline = false;  // PC (detection server) offline status
+        let startTime = Date.now();
+        let joystickData = { x: 0, y: 0 };
+        let joystickInterval = null;
+
+        // ============================================================
+        // Auto-detect PC IP
+        // ============================================================
+        async function detectPcIp() {
+            try {
+                const response = await fetch('https://api.ipify.org?format=json');
+                const data = await response.json();
+                // This is the public IP, not local. For local, we'll use window.location
+                return;
+            } catch (e) {
+                // Fallback: use current hostname
+            }
+
+            // Use the current page's hostname for PC IP
+            // If opened as file://, use a default
+            if (window.location.protocol === 'file:') {
+                PC_IP = '192.168.1.100'; // Default fallback
+            } else {
+                PC_IP = window.location.hostname;
+            }
+
+            document.getElementById('pcIp').value = PC_IP;
+            updateStreamUrl();
+        }
+
+        // ============================================================
+        // WebSocket Connection
+        // ============================================================
+        function connectWebSocket() {
+            if (ws) {
+                ws.close();
+            }
+
+            const wsUrl = `ws://${ROVER_IP}:${WS_PORT}/`;
+            console.log('Connecting to WebSocket:', wsUrl);
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                updateWsStatus('connected');
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                updateWsStatus('disconnected');
+                // Auto-reconnect after 3 seconds
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onmessage = (event) => {
+                console.log('WS message:', event.data);
+
+                // Try to parse as JSON for event handling
+                try {
+                    const data = JSON.parse(event.data);
+
+                    // Handle PC offline/online events from ESP32
+                    if (data.type === 'pcOffline') {
+                        pcOffline = data.offline;
+                        handlePcOfflineChange(pcOffline);
+                    }
+                    // Handle detection events (if broadcast from ESP32)
+                    else if (data.type === 'detection') {
+                        handleDetection(data);
+                    }
+                } catch (e) {
+                    // Not JSON, ignore
+                }
+            };
+        }
+
+        function updateWsStatus(status) {
+            const dot = document.getElementById('wsStatus');
+            const text = document.getElementById('wsStatusText');
+
+            dot.className = 'status-dot';
+
+            switch (status) {
+                case 'connected':
+                    dot.classList.add('connected');
+                    text.textContent = 'Connected';
+                    break;
+                case 'connecting':
+                    dot.classList.add('connecting');
+                    text.textContent = 'Connecting...';
+                    break;
+                default:
+                    text.textContent = 'Disconnected';
+            }
+        }
+
+        function sendWebSocket(data) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(data));
+                return true;
+            } else {
+                console.warn('WebSocket not connected, command not sent:', data);
+                return false;
+            }
+        }
+
+        // ============================================================
+        // Server-Sent Events (Detection Stream)
+        // ============================================================
+        function connectSSE() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            if (!PC_IP) return;
+
+            const sseUrl = `http://${PC_IP}:${HTTP_PORT}/events`;
+            console.log('Connecting to SSE:', sseUrl);
+
+            eventSource = new EventSource(sseUrl);
+
+            eventSource.onopen = () => {
+                console.log('SSE connected');
+            };
+
+            eventSource.onerror = (error) => {
+                console.error('SSE error:', error);
+                // Auto-reconnect is handled by EventSource
+            };
+
+            eventSource.addEventListener('detection', (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleDetection(data);
+                } catch (e) {
+                    console.error('Failed to parse SSE data:', e);
+                }
+            });
+
+            eventSource.addEventListener('message', (event) => {
+                // Keepalive messages
+            });
+        }
+
+        // ============================================================
+        // Detection Handling
+        // ============================================================
+        function handleDetection(data) {
+            console.log('Detection received:', data);
+
+            detectionCount++;
+            document.getElementById('detectionCount').textContent = detectionCount;
+
+            const label = data.class || data.label || 'Unknown';
+            const confidence = data.confidence || 0;
+
+            // Show detection banner
+            const banner = document.getElementById('detectionBanner');
+            document.getElementById('detectionLabel').textContent = label.toUpperCase() + ' DETECTED';
+            document.getElementById('detectionConf').textContent = `Confidence: ${(confidence * 100).toFixed(1)}%`;
+
+            banner.classList.add('active');
+
+            // Update auto-spray status
+            if (currentMode === 'auto') {
+                detectionActive = true;
+                updateAutoSprayStatus();
+
+                // Auto-hide banner after 3 seconds
+                setTimeout(() => {
+                    banner.classList.remove('active');
+                    detectionActive = false;
+                    updateAutoSprayStatus();
+                }, 3000);
+            } else {
+                setTimeout(() => {
+                    banner.classList.remove('active');
+                }, 3000);
+            }
+        }
+
+        // ============================================================
+        // Joystick (nipple.js)
+        // ============================================================
+        function initJoystick() {
+            const zone = document.getElementById('joystick-zone');
+
+            const manager = nipplejs.create({
+                zone: zone,
+                mode: 'static',
+                position: { left: '50%', top: '50%' },
+                color: '#58a6ff',
+                size: 150
+            });
+
+            manager.on('start', () => {
+                // Start sending drive commands
+                if (joystickInterval) clearInterval(joystickInterval);
+                joystickInterval = setInterval(sendDriveCommand, 50);
+            });
+
+            manager.on('move', (evt, data) => {
+                if (data.vector) {
+                    joystickData.x = Math.round(data.vector.x * 255);
+                    joystickData.y = Math.round(-data.vector.y * 255); // Invert Y
+                }
+            });
+
+            manager.on('end', () => {
+                joystickData.x = 0;
+                joystickData.y = 0;
+                sendDriveCommand();
+
+                if (joystickInterval) {
+                    clearInterval(joystickInterval);
+                    joystickInterval = null;
+                }
+            });
+        }
+
+        function sendDriveCommand() {
+            if (currentMode === 'manual') {
+                sendWebSocket({
+                    type: 'drive',
+                    x: joystickData.x,
+                    y: joystickData.y
+                });
+            }
+        }
+
+        // ============================================================
+        // Servo Control
+        // ============================================================
+        function servoControl(direction) {
+            if (currentMode !== 'manual') return;
+
+            switch (direction) {
+                case 'up':
+                    servoAngle = Math.min(180, servoAngle + 45);
+                    break;
+                case 'down':
+                    servoAngle = Math.max(0, servoAngle - 45);
+                    break;
+                case 'left':
+                    servoAngle = Math.max(0, servoAngle - 15);
+                    break;
+                case 'right':
+                    servoAngle = Math.min(180, servoAngle + 15);
+                    break;
+            }
+
+            servoAngle = Math.round(servoAngle / 5) * 5; // Round to nearest 5
+            servoAngle = Math.max(0, Math.min(180, servoAngle));
+
+            updateServoDisplay();
+            sendServoCommand();
+        }
+
+        function updateServoDisplay() {
+            document.getElementById('servoPos').textContent = servoAngle;
+            document.getElementById('servoCenter').textContent = servoAngle + '°';
+        }
+
+        function sendServoCommand() {
+            sendWebSocket({
+                type: 'servo1',
+                angle: servoAngle
+            });
+        }
+
+        // ============================================================
+        // Spray Control
+        // ============================================================
+        function sprayControl(id) {
+            if (currentMode === 'auto') {
+                // In auto mode, sprays are triggered by detections
+                return;
+            }
+
+            sendWebSocket({
+                type: 'spray',
+                id: id
+            });
+
+            sprayCount++;
+            document.getElementById('sprayCount').textContent = sprayCount;
+        }
+
+        // ============================================================
+        // Mode Toggle
+        // ============================================================
+        function setMode(mode) {
+            // Prevent switching to auto mode if PC is offline
+            if (mode === 'auto' && pcOffline) {
+                alert('Cannot enable auto mode while PC is offline.\nPlease check the detection server.');
+                // Update buttons to show manual is still active
+                document.getElementById('manualBtn').classList.add('active');
+                document.getElementById('autoBtn').classList.remove('active');
+                return;
+            }
+
+            currentMode = mode;
+
+            document.getElementById('manualBtn').classList.toggle('active', mode === 'manual');
+            document.getElementById('autoBtn').classList.toggle('active', mode === 'auto');
+            document.getElementById('modeBadge').textContent = 'MODE: ' + mode.toUpperCase();
+
+            // Disable auto button when PC is offline
+            document.getElementById('autoBtn').disabled = pcOffline;
+
+            updateAutoSprayStatus();
+
+            // Enable/disable spray buttons
+            const sprayBtns = document.querySelectorAll('.spray-btn');
+            sprayBtns.forEach(btn => {
+                btn.disabled = (mode === 'auto');
+            });
+
+            // Send mode to server
+            sendWebSocket({
+                type: 'autoSpray',
+                enabled: (mode === 'auto')
+            });
+        }
+
+        function updateAutoSprayStatus() {
+            const light = document.getElementById('autoSprayLight');
+            const text = document.getElementById('autoSprayText');
+
+            light.className = 'status-light';
+
+            if (currentMode === 'manual') {
+                light.classList.add('manual');
+                text.textContent = 'Manual Mode';
+            } else if (pcOffline) {
+                light.classList.add('manual');
+                text.textContent = 'PC Offline';
+            } else if (detectionActive) {
+                light.classList.add('auto-active');
+                text.textContent = 'Detection Active!';
+            } else {
+                light.classList.add('auto-idle');
+                text.textContent = 'Auto Mode - Monitoring';
+            }
+        }
+
+        // ============================================================
+        // PC Offline Handler
+        // ============================================================
+        function handlePcOfflineChange(offline) {
+            const banner = document.getElementById('pcOfflineBanner');
+
+            if (offline) {
+                // Show offline banner
+                banner.classList.add('active');
+
+                // Force switch to manual mode if in auto
+                if (currentMode === 'auto') {
+                    setMode('manual');
+                }
+
+                // Disable auto button
+                document.getElementById('autoBtn').disabled = true;
+
+                console.warn('PC is offline - auto spray disabled');
+            } else {
+                // Hide offline banner
+                banner.classList.remove('active');
+
+                // Re-enable auto button
+                document.getElementById('autoBtn').disabled = false;
+
+                console.log('PC is online - auto spray available');
+            }
+
+            updateAutoSprayStatus();
+        }
+
+        // ============================================================
+        // Video Stream
+        // ============================================================
+        function updateStreamUrl() {
+            if (!PC_IP) return;
+
+            const streamUrl = `http://${PC_IP}:${HTTP_PORT}/stream`;
+            const img = document.getElementById('stream');
+            img.src = streamUrl;
+        }
+
+        function videoLoaded() {
+            document.getElementById('videoLoading').style.display = 'none';
+            document.getElementById('stream').style.display = 'block';
+        }
+
+        function videoError() {
+            console.error('Failed to load video stream');
+            document.getElementById('videoLoading').innerHTML =
+                '<span style="color: #f85149;">Stream Offline</span>';
+        }
+
+        // ============================================================
+        // Reconnect
+        // ============================================================
+        function reconnect() {
+            ROVER_IP = document.getElementById('roverIp').value || ROVER_IP;
+            PC_IP = document.getElementById('pcIp').value || PC_IP;
+
+            updateStreamUrl();
+            connectWebSocket();
+            connectSSE();
+        }
+
+        // ============================================================
+        // Uptime Counter
+        // ============================================================
+        function updateUptime() {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+            const seconds = (elapsed % 60).toString().padStart(2, '0');
+            document.getElementById('uptime').textContent = `${minutes}:${seconds}`;
+        }
+
+        setInterval(updateUptime, 1000);
+
+        // ============================================================
+        // Initialize
+        // ============================================================
+        async function init() {
+            console.log('Initializing Plant Rover Dashboard...');
+
+            // Auto-detect PC IP
+            await detectPcIp();
+
+            // Initialize components
+            initJoystick();
+            connectWebSocket();
+            connectSSE();
+
+            // Update uptime every second
+            updateUptime();
+
+            console.log('Dashboard initialized');
+        }
+
+        // Start when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>
