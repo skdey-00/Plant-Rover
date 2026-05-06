@@ -102,6 +102,20 @@ Connection:
 
 ## 🚀 Setup Instructions
 
+### Quick Setup (Windows)
+
+**Double-click `setup.bat`** - This automated script will:
+- ✅ Download and install Python 3.11 (if not installed)
+- ✅ Install all ML training libraries
+- ✅ Install detection server dependencies
+- ✅ Install labelImg for dataset annotation
+
+Just run it and wait for completion! (~5-10 minutes)
+
+---
+
+### Manual Setup
+
 ### 1. Install Arduino IDE
 
 1. Download Arduino IDE from [arduino.cc](https://www.arduino.cc/en/software)
@@ -175,9 +189,11 @@ In Arduino IDE, go to **Sketch → Include Library → Manage Libraries** and in
 
 ## 🤖 ML Training (Optional)
 
+> **Note:** If you ran `setup.bat` on Windows, Python and all libraries are already installed!
+
 For training your own disease detection model:
 
-### Requirements
+### Requirements (Linux/Mac or if not using setup.bat)
 
 ```bash
 cd plant_rover_training
@@ -212,8 +228,17 @@ pip install -r requirements.txt
 
 ## 🖥️ Detection Server (Optional)
 
+> **Note:** If you ran `setup.bat` on Windows, all dependencies are already installed!
+
 Run the detection server on your PC for automated spraying:
 
+**Windows (after setup.bat):**
+```bash
+cd detection_server
+python detection_server.py
+```
+
+**Linux/Mac or manual setup:**
 ```bash
 cd detection_server
 pip install -r requirements.txt
@@ -232,6 +257,7 @@ The server will:
 
 ```
 Plant-Rover/
+├── setup.bat                     # Automated setup for Windows (double-click me!)
 ├── plant_rover_arduino/          # ESP32 WROOM firmware (Arduino IDE)
 │   └── plant_rover/
 │       └── plant_rover.ino       # Main controller code
