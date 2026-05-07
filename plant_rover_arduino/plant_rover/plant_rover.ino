@@ -723,6 +723,26 @@ void setup() {
     Serial.println("🌱 Plant Rover Ready!");
     Serial.println("=================================\n");
     Serial.println("Open dashboard.html to control the rover");
+    Serial.println("\n--- Serial Commands ---");
+    Serial.println("Send 'H' or '?' for help");
+}
+
+// ============================================================
+// Serial Help
+// ============================================================
+void printSerialHelp() {
+    Serial.println("\n=================================");
+    Serial.println("      SERIAL COMMANDS");
+    Serial.println("=================================\n");
+    Serial.println("Drive Commands:");
+    Serial.println("  F / W    - Forward");
+    Serial.println("  B / S    - Backward");
+    Serial.println("  L / A    - Left (pivot)");
+    Serial.println("  R / D    - Right (pivot)");
+    Serial.println("  X / SP   - Stop Motors");
+    Serial.println("\nOther Commands:");
+    Serial.println("  H / ?    - Show this help");
+    Serial.println("\n=================================\n");
 }
 
 // ============================================================
@@ -732,6 +752,72 @@ void loop() {
     webSocket.loop();
     httpServer.handleClient();
     updateSpraySystem();
+
+    // ============================================================
+    // Serial Command Handler
+    // ============================================================
+    if (Serial.available()) {
+        String command = Serial.readStringUntil('\n');
+        command.trim();
+        command.toUpperCase();
+
+        // Ignore empty commands
+        if (command.length() == 0) return;
+
+        Serial.print("Serial Command: ");
+        Serial.println(command);
+
+        // Single character commands
+        if (command.length() == 1) {
+            char cmd = command.charAt(0);
+            switch (cmd) {
+                case 'F':  // Forward
+                case 'W':  // WASD style
+                    driveMotor('F');
+                    Serial.println("-> FORWARD");
+                    break;
+                case 'B':  // Backward
+                case 'S':  // WASD style
+                    driveMotor('B');
+                    Serial.println("-> BACKWARD");
+                    break;
+                case 'L':  // Left
+                case 'A':  // WASD style
+                    driveMotor('L');
+                    Serial.println("-> LEFT");
+                    break;
+                case 'R':  // Right
+                case 'D':  // WASD style
+                    driveMotor('R');
+                    Serial.println("-> RIGHT");
+                    break;
+                case 'X':  // Stop (also spacebar handled as 'X' for simplicity)
+                case ' ':  // Space = stop
+                    stopMotors();
+                    Serial.println("-> STOP");
+                    break;
+                case 'H':  // Help
+                case '?':  // Help
+                    printSerialHelp();
+                    break;
+                default:
+                    Serial.println("Unknown command. Send 'H' or '?' for help.");
+                    break;
+            }
+        }
+        // Multi-character commands
+        else if (command.startsWith("SPEED ")) {
+            int speed = command.substring(6).toInt();
+            speed = constrain(speed, 0, 255);
+            Serial.printf("-> Set test speed to: %d\n", speed);
+        }
+        else if (command == "HELP") {
+            printSerialHelp();
+        }
+        else {
+            Serial.println("Unknown command. Send 'H' or '?' for help.");
+        }
+    }
 
     unsigned long now = millis();
 
