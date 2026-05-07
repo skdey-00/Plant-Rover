@@ -60,9 +60,9 @@ int servo3Angle = 0;
 // ============================================================
 // Motor Driver (L298N) Configuration
 // ============================================================
-// Motor A (Left) - GPIO 25 changed to GPIO 22
-const int MOTOR_A_IN1 = 22;   // Changed from 25 (was broken)
-const int MOTOR_A_IN2 = 26;
+// Motor A (Left) - GPIO 25→22, GPIO 26→13 (both were broken)
+const int MOTOR_A_IN1 = 22;   // Forward
+const int MOTOR_A_IN2 = 13;   // Backward (changed from 26)
 const int MOTOR_A_ENA = 32;   // PWM
 
 // Motor B (Right)
@@ -291,20 +291,20 @@ void differentialDrive(int x, int y) {
 void driveMotor(char direction) {
     switch (direction) {
         case 'F':
-            setMotorLeft(150);
-            setMotorRight(150);
+            setMotorLeft(-150);  // Flipped for correct direction
+            setMotorRight(-150);
             break;
         case 'B':
-            setMotorLeft(-150);
-            setMotorRight(-150);
-            break;
-        case 'L':
-            setMotorLeft(-150);
+            setMotorLeft(150);   // Flipped for correct direction
             setMotorRight(150);
             break;
+        case 'L':
+            setMotorLeft(-150);  // Left pivot (was backward)
+            setMotorRight(-150); // Both backward = pivot left
+            break;
         case 'R':
-            setMotorLeft(150);
-            setMotorRight(-150);
+            setMotorLeft(150);   // Both forward = pivot right
+            setMotorRight(150);
             break;
         case 'S':
         default:
