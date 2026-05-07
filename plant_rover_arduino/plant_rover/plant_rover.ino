@@ -806,12 +806,17 @@ void loop() {
                     Serial.println("Unknown command. Send 'H' or '?' for help.");
                     break;
             }
+
+            // Update watchdog timer so Serial commands don't get interrupted
+            lastWebSocketMessageTime = millis();
         }
         // Multi-character commands
         else if (command.startsWith("SPEED ")) {
             int speed = command.substring(6).toInt();
             speed = constrain(speed, 0, 255);
             Serial.printf("-> Set test speed to: %d\n", speed);
+            // Update watchdog timer
+            lastWebSocketMessageTime = millis();
         }
         else if (command == "HELP") {
             printSerialHelp();
