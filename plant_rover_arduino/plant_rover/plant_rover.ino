@@ -201,26 +201,40 @@ void initMotors() {
 }
 
 void stopMotors() {
+    // Set all direction pins LOW (brake/coast mode)
     digitalWrite(MOTOR_A_IN1, LOW);
     digitalWrite(MOTOR_A_IN2, LOW);
     digitalWrite(MOTOR_B_IN3, LOW);
     digitalWrite(MOTOR_B_IN4, LOW);
+
+    // Set PWM to 0 (important - prevents ghost power)
     ledcWrite(MOTOR_A_ENA, 0);
     ledcWrite(MOTOR_B_ENB, 0);
+
     motorSpeedLeft = 0;
     motorSpeedRight = 0;
 }
 
 void setMotor(int pwmPin, int in1Pin, int in2Pin, int speed) {
+    // Minimum PWM threshold - below this, motor won't move reliably
+    const int MIN_PWM = 80;
+
     if (speed > 0) {
+        // Forward
         digitalWrite(in1Pin, HIGH);
         digitalWrite(in2Pin, LOW);
-        ledcWrite(pwmPin, speed);
+        // Apply minimum threshold for actual movement
+        int pwmValue = (speed < MIN_PWM) ? 0 : speed;
+        ledcWrite(pwmPin, pwmValue);
     } else if (speed < 0) {
+        // Reverse
         digitalWrite(in1Pin, LOW);
         digitalWrite(in2Pin, HIGH);
-        ledcWrite(pwmPin, -speed);
+        // Apply minimum threshold for actual movement
+        int pwmValue = (-speed < MIN_PWM) ? 0 : -speed;
+        ledcWrite(pwmPin, pwmValue);
     } else {
+        // Stop
         digitalWrite(in1Pin, LOW);
         digitalWrite(in2Pin, LOW);
         ledcWrite(pwmPin, 0);
@@ -240,13 +254,28 @@ void setMotorRight(int speed) {
 }
 
 // Differential steering: x=steer (-255 to 255), y=throttle (-255 to 255)
+// Positive y = forward, Negative y = backward
+// Positive x = right, Negative x = left
 void differentialDrive(int x, int y) {
     x = constrain(x, -255, 255);
     y = constrain(y, -255, 255);
 
+    // Add deadband - ignore small joystick movements
+    const int DEADBAND = 20;
+    if (abs(x) < DEADBAND) x = 0;
+    if (abs(y) < DEADBAND) y = 0;
+
+    // If both are essentially zero, stop motors completely
+    if (x == 0 && y == 0) {
+        stopMotors();
+        return;
+    }
+
+    // Differential drive math
     int leftSpeed = y - x;
     int rightSpeed = y + x;
 
+    // Constrain to valid PWM range
     leftSpeed = constrain(leftSpeed, -255, 255);
     rightSpeed = constrain(rightSpeed, -255, 255);
 
