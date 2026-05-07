@@ -44,7 +44,7 @@ An autonomous plant inspection rover equipped with computer vision, ML-based dis
 │                    ESP32 WROOM-32                               │
 ├─────────────────────────────────────────────────────────────────┤
 │  MOTOR A (LEFT)          MOTOR B (RIGHT)                        │
-│  IN1  → GPIO 25          IN3  → GPIO 27                        │
+│  IN1  → GPIO 22          IN3  → GPIO 27                        │
 │  IN2  → GPIO 26          IN4  → GPIO 14                        │
 │  ENA  → GPIO 32 (PWM)    ENB  → GPIO 33 (PWM)                  │
 ├─────────────────────────────────────────────────────────────────┤
@@ -70,7 +70,7 @@ An autonomous plant inspection rover equipped with computer vision, ML-based dis
 │  OUT3 ──┐                          │
 │  OUT4 ──┼── RIGHT MOTOR (Motors 3&4)│
 │                                 │
-│  IN1  ← ESP32 GPIO 25            │
+│  IN1  ← ESP32 GPIO 22            │
 │  IN2  ← ESP32 GPIO 26            │
 │  ENA  ← ESP32 GPIO 32            │
 │                                 │
@@ -184,6 +184,23 @@ In Arduino IDE, go to **Sketch → Include Library → Manage Libraries** and in
 | **Spray Right** | Trigger right spray nozzle |
 | **Spray Both** | Trigger both nozzles simultaneously |
 | **Toggle Auto** | Enable/disable automatic spraying |
+
+### Serial Monitor Testing
+
+You can also test motors directly from Arduino Serial Monitor:
+
+1. Open Serial Monitor (baud rate: **115200**)
+2. Set "Both NL & CR" at the bottom
+3. Send commands:
+
+| Command | Action |
+|---------|--------|
+| `F` or `W` | Forward |
+| `B` or `S` | Backward |
+| `L` or `A` | Left (pivot turn) |
+| `R` or `D` | Right (pivot turn) |
+| `X` or Space | Stop motors |
+| `H` or `?` | Show help |
 
 ---
 
