@@ -60,13 +60,15 @@ int servo3Angle = 0;
 // ============================================================
 // Motor Driver (L298N) Configuration
 // ============================================================
-const int MOTOR_A_IN1 = 25;
+// Motor A (Left) - GPIO 25 changed to GPIO 22
+const int MOTOR_A_IN1 = 22;   // Changed from 25 (was broken)
 const int MOTOR_A_IN2 = 26;
-const int MOTOR_A_ENA = 32;  // PWM
+const int MOTOR_A_ENA = 32;   // PWM
 
+// Motor B (Right)
 const int MOTOR_B_IN3 = 27;
 const int MOTOR_B_IN4 = 14;
-const int MOTOR_B_ENB = 33;  // PWM
+const int MOTOR_B_ENB = 33;   // PWM
 
 const int PWM_FREQUENCY = 5000;
 const int PWM_RESOLUTION = 8;  // 8-bit = 0-255
