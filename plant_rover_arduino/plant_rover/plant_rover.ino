@@ -70,8 +70,6 @@ const int MOTOR_B_ENB = 33;  // PWM
 
 const int PWM_FREQUENCY = 5000;
 const int PWM_RESOLUTION = 8;  // 8-bit = 0-255
-const int PWM_CHANNEL_A = 0;
-const int PWM_CHANNEL_B = 1;
 
 int motorSpeedLeft = 0;
 int motorSpeedRight = 0;
@@ -195,10 +193,9 @@ void initMotors() {
     pinMode(MOTOR_B_IN3, OUTPUT);
     pinMode(MOTOR_B_IN4, OUTPUT);
 
-    ledcSetup(PWM_CHANNEL_A, PWM_FREQUENCY, PWM_RESOLUTION);
-    ledcSetup(PWM_CHANNEL_B, PWM_FREQUENCY, PWM_RESOLUTION);
-    ledcAttachPin(MOTOR_A_ENA, PWM_CHANNEL_A);
-    ledcAttachPin(MOTOR_B_ENB, PWM_CHANNEL_B);
+    // ESP32 Arduino Core 3.0+ LEDC API
+    ledcAttach(MOTOR_A_ENA, PWM_FREQUENCY, PWM_RESOLUTION);
+    ledcAttach(MOTOR_B_ENB, PWM_FREQUENCY, PWM_RESOLUTION);
 
     stopMotors();
 }
@@ -208,38 +205,38 @@ void stopMotors() {
     digitalWrite(MOTOR_A_IN2, LOW);
     digitalWrite(MOTOR_B_IN3, LOW);
     digitalWrite(MOTOR_B_IN4, LOW);
-    ledcWrite(PWM_CHANNEL_A, 0);
-    ledcWrite(PWM_CHANNEL_B, 0);
+    ledcWrite(MOTOR_A_ENA, 0);
+    ledcWrite(MOTOR_B_ENB, 0);
     motorSpeedLeft = 0;
     motorSpeedRight = 0;
 }
 
-void setMotor(int pwmChannel, int in1Pin, int in2Pin, int speed) {
+void setMotor(int pwmPin, int in1Pin, int in2Pin, int speed) {
     if (speed > 0) {
         digitalWrite(in1Pin, HIGH);
         digitalWrite(in2Pin, LOW);
-        ledcWrite(pwmChannel, speed);
+        ledcWrite(pwmPin, speed);
     } else if (speed < 0) {
         digitalWrite(in1Pin, LOW);
         digitalWrite(in2Pin, HIGH);
-        ledcWrite(pwmChannel, -speed);
+        ledcWrite(pwmPin, -speed);
     } else {
         digitalWrite(in1Pin, LOW);
         digitalWrite(in2Pin, LOW);
-        ledcWrite(pwmChannel, 0);
+        ledcWrite(pwmPin, 0);
     }
 }
 
 void setMotorLeft(int speed) {
     speed = constrain(speed, -255, 255);
     motorSpeedLeft = speed;
-    setMotor(PWM_CHANNEL_A, MOTOR_A_IN1, MOTOR_A_IN2, speed);
+    setMotor(MOTOR_A_ENA, MOTOR_A_IN1, MOTOR_A_IN2, speed);
 }
 
 void setMotorRight(int speed) {
     speed = constrain(speed, -255, 255);
     motorSpeedRight = speed;
-    setMotor(PWM_CHANNEL_B, MOTOR_B_IN3, MOTOR_B_IN4, speed);
+    setMotor(MOTOR_B_ENB, MOTOR_B_IN3, MOTOR_B_IN4, speed);
 }
 
 // Differential steering: x=steer (-255 to 255), y=throttle (-255 to 255)
@@ -413,7 +410,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
 void processCommand(char* command) {
     // Check for JSON (starts with '{')
     if (command[0] == '{') {
-        StaticJsonDocument<256> doc;
+        JsonDocument doc;
         DeserializationError error = deserializeJson(doc, command);
 
         if (!error) {
@@ -601,7 +598,7 @@ void handleDetection() {
     }
 
     String body = httpServer.arg("plain");
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, body);
 
     if (error) {
@@ -624,7 +621,7 @@ void handleDetection() {
         lastDetection.set(label, confidence);
 
         // Broadcast to WebSocket clients
-        StaticJsonDocument<256> broadcastDoc;
+        JsonDocument broadcastDoc;
         broadcastDoc["type"] = "detection";
         broadcastDoc["label"] = label;
         broadcastDoc["confidence"] = confidence;
@@ -727,7 +724,7 @@ void loop() {
                 Serial.println("PC Offline detected - disabling auto-spray");
                 autoSprayEnabled = false;
 
-                StaticJsonDocument<128> eventDoc;
+                JsonDocument eventDoc;
                 eventDoc["type"] = "pcOffline";
                 eventDoc["offline"] = true;
                 String eventJson;
@@ -735,7 +732,7 @@ void loop() {
                 webSocket.broadcastTXT(eventJson);
             } else {
                 Serial.println("PC Online detected");
-                StaticJsonDocument<128> eventDoc;
+                JsonDocument eventDoc;
                 eventDoc["type"] = "pcOffline";
                 eventDoc["offline"] = false;
                 String eventJson;
