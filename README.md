@@ -306,19 +306,21 @@ const char* AP_SSID = "PlantRover";      // WiFi name
 const char* AP_PASSWORD = "rover1234";  // WiFi password
 ```
 
-### Motor Pins
+### Motor Pins (Updated)
+
+**Note:** GPIO 25 and GPIO 26 were found to be broken on some boards. Updated to GPIO 22 and GPIO 13.
 
 Edit in `plant_rover.ino`:
 ```cpp
 // Motor A (Left)
-const int MOTOR_A_IN1 = 25;
-const int MOTOR_A_IN2 = 26;
-const int MOTOR_A_ENA = 32;
+const int MOTOR_A_IN1 = 22;  // Forward (changed from GPIO 25)
+const int MOTOR_A_IN2 = 13;  // Backward (changed from GPIO 26)
+const int MOTOR_A_ENA = 32;  // PWM
 
 // Motor B (Right)
-const int MOTOR_B_IN3 = 27;
-const int MOTOR_B_IN4 = 14;
-const int MOTOR_B_ENB = 33;
+const int MOTOR_B_IN3 = 27;  // Forward
+const int MOTOR_B_IN4 = 14;  // Backward
+const int MOTOR_B_ENB = 33;  // PWM
 ```
 
 ### Servo Pins
@@ -334,25 +336,56 @@ const int SERVO3_PIN = 21;  // Spray Right
 
 ## 🔧 Troubleshooting
 
+### Motors not working or going wrong direction
+
+**Check wiring connections:**
+- Verify all 6 motor control wires are secure
+- L298N IN1 → ESP32 GPIO 22
+- L298N IN2 → ESP32 GPIO 13
+- L298N IN3 → ESP32 GPIO 27
+- L298N IN4 → ESP32 GPIO 14
+- L298N ENA → ESP32 GPIO 32
+- L298N ENB → ESP32 GPIO 33
+
+**If motors go backward when they should go forward:**
+- Swap the two motor wires (OUT1/OUT2 for left, OUT3/OUT4 for right)
+
+**If only one motor works:**
+- Check if GPIO 25 or 26 is broken on your ESP32
+- Use code from GitHub which uses GPIO 22 and GPIO 13 instead
+- Move your wire to the new GPIO pin
+
+**Test with Serial Monitor:**
+1. Open Serial Monitor (baud: 115200)
+2. Send commands: `W` (forward), `S` (backward), `X` (stop)
+3. See Serial Monitor Testing section below for full command list
+
 ### ESP32-CAM won't connect to WiFi
 - Ensure ESP32 WROOM is powered on first
 - Check that both devices use the same WiFi credentials
 - Move ESP32-CAM closer to ESP32 WROOM
+- Verify ESP32-CAM gets IP 192.168.4.2
 
 ### Camera feed shows "Offline"
 - Check ESP32-CAM is powered on
 - Verify ESP32-CAM connected to PlantRover WiFi
 - Try accessing `http://192.168.4.2:81/stream` directly
+- Check Serial Monitor of ESP32-CAM for IP address
 
-### Motors not working
-- Check L298N power connections (12V input)
-- Verify all 6 motor control wires are connected
-- Test motors by connecting directly to 5V
+### ESP32 upload fails with "Wrong boot mode"
+- Hold BOOT button, click Upload, release when "Connecting..."
+- Or: Hold BOOT, press RESET, release BOOT, click Upload
 
 ### Dashboard won't load
 - Clear browser cache
 - Check you're connected to PlantRover WiFi
 - Verify ESP32 WROOM is running (check Serial Monitor)
+- Try http://192.168.4.1 instead of domain name
+
+### Motors moving on their own (ghost power)
+- Ensure common ground between ESP32 GND, L298N GND, and battery (-)
+- Check for loose connections on ENA/ENB pins
+- Add 10kΩ pull-down resistors on ENA and ENB to GND
 
 ---
 
