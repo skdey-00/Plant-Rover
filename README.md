@@ -45,7 +45,7 @@ An autonomous plant inspection rover equipped with computer vision, ML-based dis
 ├─────────────────────────────────────────────────────────────────┤
 │  MOTOR A (LEFT)          MOTOR B (RIGHT)                        │
 │  IN1  → GPIO 22          IN3  → GPIO 27                        │
-│  IN2  → GPIO 26          IN4  → GPIO 14                        │
+│  IN2  → GPIO 13          IN4  → GPIO 14                        │
 │  ENA  → GPIO 32 (PWM)    ENB  → GPIO 33 (PWM)                  │
 ├─────────────────────────────────────────────────────────────────┤
 │  SERVOS                                                           │
@@ -71,7 +71,7 @@ An autonomous plant inspection rover equipped with computer vision, ML-based dis
 │  OUT4 ──┼── RIGHT MOTOR (Motors 3&4)│
 │                                 │
 │  IN1  ← ESP32 GPIO 22            │
-│  IN2  ← ESP32 GPIO 26            │
+│  IN2  ← ESP32 GPIO 13            │
 │  ENA  ← ESP32 GPIO 32            │
 │                                 │
 │  IN3  ← ESP32 GPIO 27            │
