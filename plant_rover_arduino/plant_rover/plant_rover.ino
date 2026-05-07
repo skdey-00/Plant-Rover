@@ -291,20 +291,22 @@ void differentialDrive(int x, int y) {
 void driveMotor(char direction) {
     switch (direction) {
         case 'F':
-            setMotorLeft(-150);  // Flipped for correct direction
+            setMotorLeft(-150);  // Forward (both motors)
             setMotorRight(-150);
             break;
         case 'B':
-            setMotorLeft(150);   // Flipped for correct direction
+            setMotorLeft(150);   // Backward (both motors)
             setMotorRight(150);
             break;
-        case 'L':
-            setMotorLeft(-150);  // Left pivot (was backward)
-            setMotorRight(-150); // Both backward = pivot left
+        case 'L':  // Left pivot - left motor back, right motor forward
+        case 'A':
+            setMotorLeft(150);   // Left motor BACK
+            setMotorRight(-150);  // Right motor FORWARD
             break;
-        case 'R':
-            setMotorLeft(150);   // Both forward = pivot right
-            setMotorRight(150);
+        case 'R':  // Right pivot - left motor forward, right motor back
+        case 'D':
+            setMotorLeft(-150);  // Left motor FORWARD
+            setMotorRight(150);   // Right motor BACK
             break;
         case 'S':
         default:
