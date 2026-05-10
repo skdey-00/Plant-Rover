@@ -1,0 +1,7 @@
+path: C:\Users\sanme\desktop\Daanish LY Project\plant_rover_training\plant_dataset
+train: images/train
+val: images/val
+nc: 2
+names:
+- fungus
+- pest

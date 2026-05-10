@@ -7,7 +7,14 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git remote add:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(find:*)",
+      "Bash(python:*)",
+      "Bash(powershell:*)",
+      "Bash(py:*)",
+      "Bash(copy:*)",
+      "Bash(C:UserssanmeAppDataLocalProgramsPythonPython311python.exe verify_model.py plant_dataset/images/val)",
+      "Bash(\"/c/Users/sanme/AppData/Local/Programs/Python/Python311/python.exe\":*)"
     ]
   }
 }

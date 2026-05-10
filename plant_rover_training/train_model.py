@@ -70,6 +70,10 @@ def print_info(text):
     print(f"{Colors.CYAN}  {text}{Colors.END}")
 
 
+def print_warning(text):
+    print(f"{Colors.YELLOW}⚠ {text}{Colors.END}")
+
+
 def detect_device():
     """Auto-detect if CUDA GPU is available."""
     if torch.cuda.is_available():
@@ -118,6 +122,25 @@ def train_model(model, device, batch_size):
     return results
 
 
+def find_run_directory():
+    """Find the actual run directory created by Ultralytics."""
+    # Try multiple possible paths where Ultralytics might have saved the run
+    possible_paths = [
+        Path(f"{PROJECT_NAME}/runs/detect/{RUN_NAME}"),
+        Path(f"{PROJECT_NAME}/runs/detect/{RUN_NAME}"),
+        Path(f"runs/detect/{PROJECT_NAME}/{RUN_NAME}"),
+        Path(f"{PROJECT_NAME}/{RUN_NAME}"),
+        Path(f"{PROJECT_NAME}/train"),
+    ]
+
+    for path in possible_paths:
+        if path.exists() and (path / "weights" / "best.pt").exists():
+            return path
+
+    # If none found, return the first one anyway (will error out later with better message)
+    return possible_paths[0]
+
+
 def save_best_model(run_dir):
     """Copy best model to models directory."""
     print_header("SAVING BEST MODEL")
@@ -125,13 +148,23 @@ def save_best_model(run_dir):
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
     best_pt = run_dir / "weights" / "best.pt"
-    if best_pt.exists():
-        shutil.copy2(best_pt, MODEL_OUTPUT)
-        print_success(f"Best model saved to: {MODEL_OUTPUT}")
-    else:
-        print(f"Warning: best.pt not found at {best_pt}")
 
-    return best_pt
+    if not best_pt.exists():
+        print(f"Warning: best.pt not found at {best_pt}")
+        print(f"Looking for best.pt in run directory...")
+        # List what's actually in the run_dir
+        if run_dir.exists():
+            weights_dir = run_dir / "weights"
+            if weights_dir.exists():
+                print(f"Found files in weights/: {list(weights_dir.glob('*.pt'))}")
+            else:
+                print(f"No weights/ directory found at {run_dir}")
+        return None
+
+    shutil.copy2(best_pt, MODEL_OUTPUT)
+    print_success(f"Best model saved to: {MODEL_OUTPUT}")
+    print_success(f"Source: {best_pt}")
+    return MODEL_OUTPUT
 
 
 def export_to_onnx(model):
@@ -315,16 +348,20 @@ def main():
     # Train
     train_model(model, device, batch_size)
 
-    # Get run directory
-    run_dir = Path(f"{PROJECT_NAME}/{RUN_NAME}")
-    if not run_dir.exists():
-        run_dir = Path(f"{PROJECT_NAME}") / "train"
+    # Find the actual run directory where Ultralytics saved the model
+    run_dir = find_run_directory()
+    print_info(f"Run directory: {run_dir}")
 
-    # Save best model
-    save_best_model(run_dir)
+    # Save best model to models/ directory
+    saved_model_path = save_best_model(run_dir)
+
+    if saved_model_path is None:
+        print("\nError: Could not find trained model. Training may have failed.")
+        print(f"Please check if the model exists at: {run_dir}/weights/best.pt")
+        sys.exit(1)
 
     # Load best model for validation/export
-    best_model = YOLO(str(MODEL_OUTPUT))
+    best_model = YOLO(str(saved_model_path))
 
     # Export to ONNX
     export_to_onnx(best_model)
