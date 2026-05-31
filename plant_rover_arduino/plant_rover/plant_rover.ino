@@ -11,7 +11,7 @@
  *   - IN3: GPIO 27, IN4: GPIO 14 (Motor B - Right)
  *   - ENA: GPIO 33 (PWM Left)
  *   - ENB: GPIO 32 (PWM Right)
- * - L298N #2 (Spray BO Motors):
+ * - L298N #2 (Spray BO Motors - single direction):
  *   - IN1: GPIO 18, IN2: GPIO 5  (Spray Motor A - Left)
  *   - IN3: GPIO 21, IN4: GPIO 22 (Spray Motor B - Right)
  *   - ENA: GPIO 4  (PWM Left)
@@ -56,11 +56,12 @@ const int SPRAY_AIM_PIN = 19;  // 0°=left, 90°=home, 180°=right
 Servo sprayAimServo;
 int sprayAimAngle = 90;  // 0=full left, 90=home/center, 180=full right
 // Spray BO Motor Driver (L298N #2 - dedicated to spray activation)
-const int SPRAY_IN1 = 18;  // Spray Motor A (left) direction
-const int SPRAY_IN2 = 5;   // Spray Motor A (left) direction
+// Motors are single-direction: HIGH=press spray, LOW=released
+const int SPRAY_IN1 = 18;  // Spray Motor A (left)
+const int SPRAY_IN2 = 5;   // Spray Motor A (left)
 const int SPRAY_ENA = 4;   // Spray Motor A (left) PWM speed
-const int SPRAY_IN3 = 21;  // Spray Motor B (right) direction
-const int SPRAY_IN4 = 22;  // Spray Motor B (right) direction
+const int SPRAY_IN3 = 21;  // Spray Motor B (right)
+const int SPRAY_IN4 = 22;  // Spray Motor B (right)
 const int SPRAY_ENB = 15;  // Spray Motor B (right) PWM speed
 const int SPRAY_MOTOR_SPEED = 255;  // Full speed for BO motors
 
