@@ -84,6 +84,13 @@ const int MOTOR_B_ENB = 32;   // Right PWM
 const int PWM_FREQUENCY = 5000;
 const int PWM_RESOLUTION = 8;  // 8-bit = 0-255
 
+// LEDC channels (old API uses channel numbers, not pins)
+const int PWM_CH_DRIVE_A = 0;   // Motor A (left) PWM
+const int PWM_CH_DRIVE_B = 1;   // Motor B (right) PWM
+const int PWM_CH_SPRAY_A = 2;   // Spray motor A PWM
+const int PWM_CH_SPRAY_B = 3;   // Spray motor B PWM
+const int PWM_CH_SERVO   = 4;   // Servo PWM
+
 int motorSpeedLeft = 0;
 int motorSpeedRight = 0;
 
@@ -124,10 +131,10 @@ struct SprayMotorController {
 
         if (motorId == 1) {
             digitalWrite(SPRAY_IN1, HIGH);
-            ledcWrite(SPRAY_ENA, SPRAY_MOTOR_SPEED);
+            ledcWrite(PWM_CH_SPRAY_A, SPRAY_MOTOR_SPEED);
         } else {
             digitalWrite(SPRAY_IN3, HIGH);
-            ledcWrite(SPRAY_ENB, SPRAY_MOTOR_SPEED);
+            ledcWrite(PWM_CH_SPRAY_B, SPRAY_MOTOR_SPEED);
         }
     }
 
@@ -141,10 +148,10 @@ struct SprayMotorController {
     void stop() {
         if (motorId == 1) {
             digitalWrite(SPRAY_IN1, LOW);
-            ledcWrite(SPRAY_ENA, 0);
+            ledcWrite(PWM_CH_SPRAY_A, 0);
         } else if (motorId == 2) {
             digitalWrite(SPRAY_IN3, LOW);
-            ledcWrite(SPRAY_ENB, 0);
+            ledcWrite(PWM_CH_SPRAY_B, 0);
         }
         state = SPRAY_MOTOR_IDLE;
     }
@@ -191,9 +198,11 @@ void initMotors() {
     pinMode(MOTOR_B_IN3, OUTPUT);
     pinMode(MOTOR_B_IN4, OUTPUT);
 
-    // ESP32 Arduino Core 3.0+ LEDC API
-    ledcAttach(MOTOR_A_ENA, PWM_FREQUENCY, PWM_RESOLUTION);
-    ledcAttach(MOTOR_B_ENB, PWM_FREQUENCY, PWM_RESOLUTION);
+    // LEDC PWM setup (old API)
+    ledcSetup(PWM_CH_DRIVE_A, PWM_FREQUENCY, PWM_RESOLUTION);
+    ledcSetup(PWM_CH_DRIVE_B, PWM_FREQUENCY, PWM_RESOLUTION);
+    ledcAttachPin(MOTOR_A_ENA, PWM_CH_DRIVE_A);
+    ledcAttachPin(MOTOR_B_ENB, PWM_CH_DRIVE_B);
 
     stopMotors();
 }
@@ -206,14 +215,14 @@ void stopMotors() {
     digitalWrite(MOTOR_B_IN4, LOW);
 
     // Set PWM to 0 (important - prevents ghost power)
-    ledcWrite(MOTOR_A_ENA, 0);
-    ledcWrite(MOTOR_B_ENB, 0);
+    ledcWrite(PWM_CH_DRIVE_A, 0);
+    ledcWrite(PWM_CH_DRIVE_B, 0);
 
     motorSpeedLeft = 0;
     motorSpeedRight = 0;
 }
 
-void setMotor(int pwmPin, int in1Pin, int in2Pin, int speed) {
+void setMotor(int pwmChannel, int in1Pin, int in2Pin, int speed) {
     // Minimum PWM threshold - below this, motor won't move reliably
     const int MIN_PWM = 80;
 
@@ -223,32 +232,32 @@ void setMotor(int pwmPin, int in1Pin, int in2Pin, int speed) {
         digitalWrite(in2Pin, LOW);
         // Apply minimum threshold for actual movement
         int pwmValue = (speed < MIN_PWM) ? 0 : speed;
-        ledcWrite(pwmPin, pwmValue);
+        ledcWrite(pwmChannel, pwmValue);
     } else if (speed < 0) {
         // Reverse
         digitalWrite(in1Pin, LOW);
         digitalWrite(in2Pin, HIGH);
         // Apply minimum threshold for actual movement
         int pwmValue = (-speed < MIN_PWM) ? 0 : -speed;
-        ledcWrite(pwmPin, pwmValue);
+        ledcWrite(pwmChannel, pwmValue);
     } else {
         // Stop
         digitalWrite(in1Pin, LOW);
         digitalWrite(in2Pin, LOW);
-        ledcWrite(pwmPin, 0);
+        ledcWrite(pwmChannel, 0);
     }
 }
 
 void setMotorLeft(int speed) {
     speed = constrain(speed, -255, 255);
     motorSpeedLeft = speed;
-    setMotor(MOTOR_A_ENA, MOTOR_A_IN1, MOTOR_A_IN2, speed);
+    setMotor(PWM_CH_DRIVE_A, MOTOR_A_IN1, MOTOR_A_IN2, speed);
 }
 
 void setMotorRight(int speed) {
     speed = constrain(speed, -255, 255);
     motorSpeedRight = speed;
-    setMotor(MOTOR_B_ENB, MOTOR_B_IN3, MOTOR_B_IN4, speed);
+    setMotor(PWM_CH_DRIVE_B, MOTOR_B_IN3, MOTOR_B_IN4, speed);
 }
 
 // Differential steering: x=steer (-255 to 255), y=throttle (-255 to 255)
@@ -323,15 +332,16 @@ uint32_t angleToDuty(int angle) {
 }
 
 void initServos() {
-    ledcAttach(SPRAY_AIM_PIN, SERVO_FREQ, SERVO_RES);
-    ledcWrite(SPRAY_AIM_PIN, angleToDuty(sprayAimAngle));
+    ledcSetup(PWM_CH_SERVO, SERVO_FREQ, SERVO_RES);
+    ledcAttachPin(SPRAY_AIM_PIN, PWM_CH_SERVO);
+    ledcWrite(PWM_CH_SERVO, angleToDuty(sprayAimAngle));
     delay(500);
     Serial.println("Spray aim servo ready on GPIO 5 (direct LEDC)");
 }
 
 void setSprayAim(int angle) {
     sprayAimAngle = constrain(angle, 0, 180);
-    ledcWrite(SPRAY_AIM_PIN, angleToDuty(sprayAimAngle));
+    ledcWrite(PWM_CH_SERVO, angleToDuty(sprayAimAngle));
     Serial.printf("Spray aim: %d deg (duty=%u)\n", sprayAimAngle, angleToDuty(sprayAimAngle));
 }
 
@@ -342,14 +352,16 @@ void initSprayMotors() {
     pinMode(SPRAY_IN1, OUTPUT);
     pinMode(SPRAY_IN3, OUTPUT);
 
-    ledcAttach(SPRAY_ENA, 5000, 8);
-    ledcAttach(SPRAY_ENB, 5000, 8);
+    ledcSetup(PWM_CH_SPRAY_A, 5000, 8);
+    ledcSetup(PWM_CH_SPRAY_B, 5000, 8);
+    ledcAttachPin(SPRAY_ENA, PWM_CH_SPRAY_A);
+    ledcAttachPin(SPRAY_ENB, PWM_CH_SPRAY_B);
 
     // Ensure motors are off
     digitalWrite(SPRAY_IN1, LOW);
     digitalWrite(SPRAY_IN3, LOW);
-    ledcWrite(SPRAY_ENA, 0);
-    ledcWrite(SPRAY_ENB, 0);
+    ledcWrite(PWM_CH_SPRAY_A, 0);
+    ledcWrite(PWM_CH_SPRAY_B, 0);
 
     Serial.println("Spray BO motors ready on L298N #2");
 }
