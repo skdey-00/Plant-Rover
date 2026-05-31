@@ -5,19 +5,24 @@
  *
  * Hardware:
  * - ESP32 WROOM
- * - 3x Servos on GPIO 18, 19, 21
- * - L298N Motor Driver:
- *   - IN1: GPIO 25, IN2: GPIO 26 (Motor A - Left)
+ * - 1x Servo (spray aim) on GPIO 19
+ * - L298N #1 (Drive):
+ *   - IN1: GPIO 22, IN2: GPIO 13 (Motor A - Left)
  *   - IN3: GPIO 27, IN4: GPIO 14 (Motor B - Right)
  *   - ENA: GPIO 32 (PWM Left)
  *   - ENB: GPIO 33 (PWM Right)
+ * - L298N #2 (Spray BO Motors):
+ *   - IN1: GPIO 5,  IN2: GPIO 23 (Spray Motor A - Left)
+ *   - IN3: GPIO 16, IN4: GPIO 17 (Spray Motor B - Right)
+ *   - ENA: GPIO 4  (PWM Left)
+ *   - ENB: GPIO 15 (PWM Right)
  *
  * Features:
  * - WiFi AP: "PlantRover" / "rover1234"
  * - HTTP Server on port 80 (HTML Dashboard)
  * - WebSocket Server on port 81
  * - Differential steering
- * - Spray system with rate limiting
+ * - Spray aim servo (0-180) + BO motor spray activation
  * - Watchdog and PC offline detection
  */
 
