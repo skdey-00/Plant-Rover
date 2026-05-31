@@ -5,7 +5,7 @@
  *
  * Hardware:
  * - ESP32 WROOM
- * - 1x Servo (spray aim) on GPIO 19
+ * - 1x Servo (spray aim) on GPIO 5
  * - L298N #1 (Drive):
  *   - IN1: GPIO 23, IN2: GPIO 13 (Motor A - Left)
  *   - IN3: GPIO 27, IN4: GPIO 14 (Motor B - Right)
@@ -29,7 +29,6 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <WebSocketsServer.h>
-#include <ESP32Servo.h>
 #include <ArduinoJson.h>
 
 // ============================================================
@@ -51,17 +50,22 @@ WebSocketsServer webSocket = WebSocketsServer(WS_PORT);
 // Servo + Spray System Configuration
 // ============================================================
 // Single servo: spray assembly aim rotation
-const int SPRAY_AIM_PIN = 19;  // 0°=left, 90°=home, 180°=right
+const int SPRAY_AIM_PIN = 5;  // 0°=left, 90°=home, 180°=right
 
-Servo sprayAimServo;
 int sprayAimAngle = 90;  // 0=full left, 90=home/center, 180=full right
+
+// Servo driven directly via LEDC PWM (50Hz, 16-bit)
+// No Servo library needed -- more reliable on ESP32
+#define SERVO_FREQ 50        // 50Hz = 20ms period
+#define SERVO_RES 16         // 16-bit resolution
+#define SERVO_MIN_US 500     // minimum pulse width (0 deg)
+#define SERVO_MAX_US 2500    // maximum pulse width (180 deg)
+
 // Spray BO Motor Driver (L298N #2 - dedicated to spray activation)
-// Motors are single-direction: HIGH=press spray, LOW=released
+// Single-direction: IN2/IN4 hardwired to GND on the L298N board
 const int SPRAY_IN1 = 18;  // Spray Motor A (left)
-const int SPRAY_IN2 = 5;   // Spray Motor A (left)
 const int SPRAY_ENA = 4;   // Spray Motor A (left) PWM speed
 const int SPRAY_IN3 = 21;  // Spray Motor B (right)
-const int SPRAY_IN4 = 22;  // Spray Motor B (right)
 const int SPRAY_ENB = 15;  // Spray Motor B (right) PWM speed
 const int SPRAY_MOTOR_SPEED = 255;  // Full speed for BO motors
 
@@ -120,11 +124,9 @@ struct SprayMotorController {
 
         if (motorId == 1) {
             digitalWrite(SPRAY_IN1, HIGH);
-            digitalWrite(SPRAY_IN2, LOW);
             ledcWrite(SPRAY_ENA, SPRAY_MOTOR_SPEED);
         } else {
             digitalWrite(SPRAY_IN3, HIGH);
-            digitalWrite(SPRAY_IN4, LOW);
             ledcWrite(SPRAY_ENB, SPRAY_MOTOR_SPEED);
         }
     }
@@ -139,11 +141,9 @@ struct SprayMotorController {
     void stop() {
         if (motorId == 1) {
             digitalWrite(SPRAY_IN1, LOW);
-            digitalWrite(SPRAY_IN2, LOW);
             ledcWrite(SPRAY_ENA, 0);
         } else if (motorId == 2) {
             digitalWrite(SPRAY_IN3, LOW);
-            digitalWrite(SPRAY_IN4, LOW);
             ledcWrite(SPRAY_ENB, 0);
         }
         state = SPRAY_MOTOR_IDLE;
@@ -314,17 +314,25 @@ void driveMotor(char direction) {
 // ============================================================
 // Servo Functions
 // ============================================================
+// Helper: convert angle (0-180) to LEDC duty cycle value
+uint32_t angleToDuty(int angle) {
+    int pulseUs = map(angle, 0, 180, SERVO_MIN_US, SERVO_MAX_US);
+    // duty = pulseUs / periodUs * (2^res - 1)
+    uint32_t duty = (uint32_t)((float)pulseUs * ((1 << SERVO_RES) - 1) / (1000000.0 / SERVO_FREQ));
+    return duty;
+}
+
 void initServos() {
-    sprayAimServo.attach(SPRAY_AIM_PIN);
-    sprayAimServo.write(sprayAimAngle);
+    ledcAttach(SPRAY_AIM_PIN, SERVO_FREQ, SERVO_RES);
+    ledcWrite(SPRAY_AIM_PIN, angleToDuty(sprayAimAngle));
     delay(500);
-    Serial.println("Spray aim servo ready on GPIO 19");
+    Serial.println("Spray aim servo ready on GPIO 5 (direct LEDC)");
 }
 
 void setSprayAim(int angle) {
     sprayAimAngle = constrain(angle, 0, 180);
-    sprayAimServo.write(sprayAimAngle);
-    Serial.printf("Spray aim: %d deg\n", sprayAimAngle);
+    ledcWrite(SPRAY_AIM_PIN, angleToDuty(sprayAimAngle));
+    Serial.printf("Spray aim: %d deg (duty=%u)\n", sprayAimAngle, angleToDuty(sprayAimAngle));
 }
 
 // ============================================================
@@ -332,18 +340,14 @@ void setSprayAim(int angle) {
 // ============================================================
 void initSprayMotors() {
     pinMode(SPRAY_IN1, OUTPUT);
-    pinMode(SPRAY_IN2, OUTPUT);
     pinMode(SPRAY_IN3, OUTPUT);
-    pinMode(SPRAY_IN4, OUTPUT);
 
     ledcAttach(SPRAY_ENA, 5000, 8);
     ledcAttach(SPRAY_ENB, 5000, 8);
 
     // Ensure motors are off
     digitalWrite(SPRAY_IN1, LOW);
-    digitalWrite(SPRAY_IN2, LOW);
     digitalWrite(SPRAY_IN3, LOW);
-    digitalWrite(SPRAY_IN4, LOW);
     ledcWrite(SPRAY_ENA, 0);
     ledcWrite(SPRAY_ENB, 0);
 
@@ -672,7 +676,7 @@ void setup() {
     // Initialize Servos
     Serial.println("Initializing servos...");
     initServos();
-    Serial.println("Servos ready (sprayAim=GPIO19)");
+    Serial.println("Servos ready (sprayAim=GPIO5)");
 
     // Initialize Motors
     Serial.println("Initializing motor driver...");
