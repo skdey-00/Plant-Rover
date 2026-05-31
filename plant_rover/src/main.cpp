@@ -5,13 +5,13 @@
  * - ESP32 WROOM
  * - 1x Servo (spray aim) on GPIO 19
  * - L298N #1 (Drive):
- *   - IN1: GPIO 22, IN2: GPIO 13 (Motor A - Left)
+ *   - IN1: GPIO 23, IN2: GPIO 13 (Motor A - Left)
  *   - IN3: GPIO 27, IN4: GPIO 14 (Motor B - Right)
- *   - ENA: GPIO 32 (PWM Left)
- *   - ENB: GPIO 33 (PWM Right)
+ *   - ENA: GPIO 33 (PWM Left)
+ *   - ENB: GPIO 32 (PWM Right)
  * - L298N #2 (Spray BO Motors):
- *   - IN1: GPIO 5,  IN2: GPIO 23 (Spray Motor A - Left)
- *   - IN3: GPIO 16, IN4: GPIO 17 (Spray Motor B - Right)
+ *   - IN1: GPIO 18, IN2: GPIO 5  (Spray Motor A - Left)
+ *   - IN3: GPIO 21, IN4: GPIO 22 (Spray Motor B - Right)
  *   - ENA: GPIO 4  (PWM Left)
  *   - ENB: GPIO 15 (PWM Right)
  *
@@ -53,26 +53,26 @@ Servo sprayAimServo;
 int sprayAimAngle = 90;  // 0=full left, 90=home/center, 180=full right
 
 // Spray BO Motor Driver (L298N #2 - dedicated to spray activation)
-const int SPRAY_IN1 = 5;   // Spray Motor A (left) direction
-const int SPRAY_IN2 = 23;  // Spray Motor A (left) direction
+const int SPRAY_IN1 = 18;  // Spray Motor A (left) direction
+const int SPRAY_IN2 = 5;   // Spray Motor A (left) direction
 const int SPRAY_ENA = 4;   // Spray Motor A (left) PWM speed
-const int SPRAY_IN3 = 16;  // Spray Motor B (right) direction
-const int SPRAY_IN4 = 17;  // Spray Motor B (right) direction
+const int SPRAY_IN3 = 21;  // Spray Motor B (right) direction
+const int SPRAY_IN4 = 22;  // Spray Motor B (right) direction
 const int SPRAY_ENB = 15;  // Spray Motor B (right) PWM speed
 const int SPRAY_MOTOR_SPEED = 255;  // Full speed for BO motors
 
 // ============================================================
-// Motor Driver (L298N) Configuration
 // ============================================================
-// Motor A (Left) - GPIO 25→22, GPIO 26→13 (both were broken on board)
-const int MOTOR_A_IN1 = 22;   // Forward
-const int MOTOR_A_IN2 = 13;   // Backward
-const int MOTOR_A_ENA = 32;   // PWM
+// Motor Driver (L298N #1 - Drive) Configuration
+// ============================================================
+const int MOTOR_A_IN1 = 23;   // Left motor forward
+const int MOTOR_A_IN2 = 13;   // Left motor backward
+const int MOTOR_A_ENA = 33;   // Left PWM
 
 // Motor B (Right)
 const int MOTOR_B_IN3 = 27;
 const int MOTOR_B_IN4 = 14;
-const int MOTOR_B_ENB = 33;  // PWM
+const int MOTOR_B_ENB = 32;   // Right PWM
 
 const int PWM_FREQUENCY = 5000;
 const int PWM_RESOLUTION = 8;  // 8-bit = 0-255
