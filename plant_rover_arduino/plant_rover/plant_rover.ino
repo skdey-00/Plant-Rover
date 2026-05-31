@@ -43,25 +43,13 @@ WebServer httpServer(HTTP_PORT);
 WebSocketsServer webSocket = WebSocketsServer(WS_PORT);
 
 // ============================================================
-// Servo Configuration
+// Servo + Spray System Configuration
 // ============================================================
-const int SERVO1_PIN = 18;  // General purpose servo
-const int SERVO3_PIN = 21;  // General purpose servo
+// Single servo: spray assembly aim rotation
+const int SPRAY_AIM_PIN = 19;  // 0°=left, 90°=home, 180°=right
 
-Servo servo1;
-Servo servo3;
-
-int servo1Angle = 90;
-int servo3Angle = 0;
-
-// ============================================================
-// Spray System Configuration
-// ============================================================
-// Spray Aim Servo (aims the spray assembly left/right)
-const int SPRAY_AIM_PIN = 19;
 Servo sprayAimServo;
 int sprayAimAngle = 90;  // 0=full left, 90=home/center, 180=full right
-
 // Spray BO Motor Driver (L298N #2 - dedicated to spray activation)
 const int SPRAY_IN1 = 5;   // Spray Motor A (left) direction
 const int SPRAY_IN2 = 23;  // Spray Motor A (left) direction
@@ -322,30 +310,10 @@ void driveMotor(char direction) {
 // Servo Functions
 // ============================================================
 void initServos() {
-    servo1.attach(SERVO1_PIN);
-    servo3.attach(SERVO3_PIN);
     sprayAimServo.attach(SPRAY_AIM_PIN);
-
-    servo1.write(servo1Angle);
-    servo3.write(servo3Angle);
     sprayAimServo.write(sprayAimAngle);
-
     delay(500);
-}
-
-void setServoAngle(uint8_t servoNum, uint8_t angle) {
-    angle = constrain(angle, 0, 180);
-    switch (servoNum) {
-        case 1:
-            servo1Angle = angle;
-            servo1.write(angle);
-            break;
-        case 3:
-            servo3Angle = angle;
-            servo3.write(angle);
-            break;
-    }
-    Serial.printf("Servo %d set to %d\n", servoNum, angle);
+    Serial.println("Spray aim servo ready on GPIO 19");
 }
 
 void setSprayAim(int angle) {
@@ -469,10 +437,6 @@ void processCommand(char* command) {
                 int y = doc["y"];
                 differentialDrive(x, y);
             }
-            else if (strcmp(type, "servo1") == 0) {
-                int angle = doc["angle"];
-                setServoAngle(1, angle);
-            }
             else if (strcmp(type, "sprayAim") == 0) {
                 int angle = doc["angle"];
                 setSprayAim(angle);
@@ -515,14 +479,6 @@ void processCommand(char* command) {
             setMotorLeft(left);
             setMotorRight(right);
         }
-    }
-    else if (strncmp(command, "S1:", 3) == 0) {
-        uint8_t angle = atoi(command + 3);
-        setServoAngle(1, angle);
-    }
-    else if (strncmp(command, "S3:", 3) == 0) {
-        uint8_t angle = atoi(command + 3);
-        setServoAngle(3, angle);
     }
     else if (strncmp(command, "SA:", 3) == 0) {
         int angle = atoi(command + 3);
@@ -573,11 +529,6 @@ void handleRoot() {
     html += "<button class='right' ontouchstart='sendDrive(1,0)' onmousedown='sendDrive(1,0)' ontouchend='stopDrive()' onmouseup='stopDrive()'>▶</button>";
     html += "<button class='down' ontouchstart='sendDrive(0,1)' onmousedown='sendDrive(0,1)' ontouchend='stopDrive()' onmouseup='stopDrive()'>▼</button>";
     html += "</div></div>";
-    // Servo Control
-    html += "<div class='card'><h2>🔧 Servo Control</h2>";
-    html += "<input type='range' class='slider' id='servoSlider' min='0' max='180' value='90' oninput='updateServo(this.value)' style='width:100%'>";
-    html += "<div class='info'>Angle: <span id='servoVal'>90</span> deg</div>";
-    html += "<button class='btn btn-success' onclick='document.getElementById(\"servoSlider\").value=90;updateServo(90)'>🏠 Home (90)</button></div>";
     // Spray Aim
     html += "<div class='card'><h2>🎯 Spray Aim</h2>";
     html += "<input type='range' class='slider' id='aimSlider' min='0' max='180' value='90' oninput='updateAim(this.value)' style='width:100%'>";
@@ -608,7 +559,6 @@ void handleRoot() {
     html += "function sendJSON(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o));}";
     html += "function sendDrive(x,y){sendJSON({type:'drive',x:x*255,y:y*255});document.getElementById('xVal').textContent=Math.round(x*255);document.getElementById('yVal').textContent=Math.round(y*255);}";
     html += "function stopDrive(){sendJSON({type:'drive',x:0,y:0});document.getElementById('xVal').textContent='0';document.getElementById('yVal').textContent='0';}";
-    html += "function updateServo(v){document.getElementById('servoVal').textContent=v;sendJSON({type:'servo1',angle:parseInt(v)});}";
     html += "function updateAim(v){document.getElementById('aimVal').textContent=v;sendJSON({type:'sprayAim',angle:parseInt(v)});}";
     html += "function aimPreset(a){document.getElementById('aimSlider').value=a;updateAim(a);}";
     html += "function spray(id){sendJSON({type:'spray',id:id});}";
@@ -630,8 +580,6 @@ void handleRoot() {
 void handleStatus() {
     String json = "{";
     json += "\"connected\":true,";
-    json += "\"servo1\":" + String(servo1Angle) + ",";
-    json += "\"servo3\":" + String(servo3Angle) + ",";
     json += "\"sprayAim\":" + String(sprayAimAngle) + ",";
     json += "\"motorLeft\":" + String(motorSpeedLeft) + ",";
     json += "\"motorRight\":" + String(motorSpeedRight) + ",";
@@ -719,7 +667,7 @@ void setup() {
     // Initialize Servos
     Serial.println("Initializing servos...");
     initServos();
-    Serial.println("Servos ready (servo1=GPIO18, servo3=GPIO21, sprayAim=GPIO19)");
+    Serial.println("Servos ready (sprayAim=GPIO19)");
 
     // Initialize Motors
     Serial.println("Initializing motor driver...");

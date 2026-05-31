@@ -557,20 +557,6 @@
                 <div class="joystick-label">Drive - Drag to move</div>
             </div>
 
-            <div class="servo-section">
-                <div class="panel-title" style="margin-bottom: 10px;">Servo 1 Control</div>
-                <div class="servo-dpad">
-                    <button class="dpad-btn up" onmousedown="servoControl('up')" ontouchstart="servoControl('up')">▲</button>
-                    <button class="dpad-btn left" onmousedown="servoControl('left')" ontouchstart="servoControl('left')">◀</button>
-                    <button class="dpad-btn center" id="servoCenter">90°</button>
-                    <button class="dpad-btn right" onmousedown="servoControl('right')" ontouchstart="servoControl('right')">▶</button>
-                    <button class="dpad-btn down" onmousedown="servoControl('down')" ontouchstart="servoControl('down')">▼</button>
-                </div>
-                <div style="text-align: center; margin-top: 10px; font-size: 0.85rem; color: var(--text-secondary);">
-                    Position: <span id="servoPos">90</span>°
-                </div>
-            </div>
-
             <div class="servo-section" style="margin-top: 15px;">
                 <div class="panel-title" style="margin-bottom: 10px;">🎯 Spray Aim</div>
                 <div style="padding: 0 5px;">
@@ -741,9 +727,8 @@
         let ws = null;
         let eventSource = null;
         let currentMode = 'manual'; // 'manual' or 'auto'
-        let servoAngle = 90;
-        let detectionCount = 0;
         let sprayCount = 0;
+        let detectionCount = 0;
         let detectionActive = false;
         let pcOffline = false;  // PC (detection server) offline status
         let startTime = Date.now();
@@ -967,46 +952,6 @@
                     y: joystickData.y
                 });
             }
-        }
-
-        // ============================================================
-        // Servo Control
-        // ============================================================
-        function servoControl(direction) {
-            if (currentMode !== 'manual') return;
-
-            switch (direction) {
-                case 'up':
-                    servoAngle = Math.min(180, servoAngle + 45);
-                    break;
-                case 'down':
-                    servoAngle = Math.max(0, servoAngle - 45);
-                    break;
-                case 'left':
-                    servoAngle = Math.max(0, servoAngle - 15);
-                    break;
-                case 'right':
-                    servoAngle = Math.min(180, servoAngle + 15);
-                    break;
-            }
-
-            servoAngle = Math.round(servoAngle / 5) * 5; // Round to nearest 5
-            servoAngle = Math.max(0, Math.min(180, servoAngle));
-
-            updateServoDisplay();
-            sendServoCommand();
-        }
-
-        function updateServoDisplay() {
-            document.getElementById('servoPos').textContent = servoAngle;
-            document.getElementById('servoCenter').textContent = servoAngle + '°';
-        }
-
-        function sendServoCommand() {
-            sendWebSocket({
-                type: 'servo1',
-                angle: servoAngle
-            });
         }
 
         // ============================================================

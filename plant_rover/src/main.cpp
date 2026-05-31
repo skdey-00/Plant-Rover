@@ -42,19 +42,9 @@ WebSocketsServer webSocket = WebSocketsServer(WS_PORT);
 // ============================================================
 // Servo Configuration
 // ============================================================
-const int SERVO1_PIN = 18;  // General purpose servo
-const int SERVO3_PIN = 21;  // General purpose servo
-
-Servo servo1;
-Servo servo3;
-
-int servo1Angle = 90;
-int servo3Angle = 0;
-
+// Servo + Spray System Configuration
 // ============================================================
-// Spray System Configuration
-// ============================================================
-// Spray Aim Servo (aims the spray assembly left/right)
+// Single servo: spray assembly aim rotation
 const int SPRAY_AIM_PIN = 19;
 Servo sprayAimServo;
 int sprayAimAngle = 90;  // 0=full left, 90=home/center, 180=full right
@@ -612,24 +602,6 @@ const char htmlPage[] PROGMEM = R"rawliteral(
                 </div>
             </div>
 
-            <!-- Servo 1 -->
-            <div class="card">
-                <h2>🔧 Servo 1 (GPIO 18)</h2>
-                <div class="slider-group">
-                    <div class="slider-row">
-                        <input type="range" id="servo1" min="0" max="180" value="90" oninput="updateServo(1, this.value)">
-                        <span class="value-display" id="servo1Val">90°</span>
-                    </div>
-                </div>
-                <div class="quick-angles">
-                    <button class="quick-btn" onclick="setServo(1, 0)">0°</button>
-                    <button class="quick-btn" onclick="setServo(1, 45)">45°</button>
-                    <button class="quick-btn" onclick="setServo(1, 90)">90°</button>
-                    <button class="quick-btn" onclick="setServo(1, 135)">135°</button>
-                    <button class="quick-btn" onclick="setServo(1, 180)">180°</button>
-                </div>
-            </div>
-
             <!-- Spray Aim -->
             <div class="card">
                 <h2>🎯 Spray Aim (GPIO 19)</h2>
@@ -706,9 +678,6 @@ const char htmlPage[] PROGMEM = R"rawliteral(
                 <pre style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; overflow-x: auto; font-size: 0.85rem;">
 // Differential Drive (x: -255 to 255, y: -255 to 255)
 {"type":"drive","x":-100,"y":200}
-
-// Servo 1 Control
-{"type":"servo1","angle":90}
 
 // Spray Aim (0=left, 90=center, 180=right)
 {"type":"sprayAim","angle":90}
@@ -868,18 +837,6 @@ const char htmlPage[] PROGMEM = R"rawliteral(
             addLog('Motor: STOP');
         }
 
-        // Servo Control
-        function updateServo(num, angle) {
-            document.getElementById('servo' + num + 'Val').textContent = angle + '°';
-            sendJSON({ type: 'servo' + num, angle: parseInt(angle) });
-        }
-
-        function setServo(num, angle) {
-            document.getElementById('servo' + num).value = angle;
-            updateServo(num, angle);
-            addLog('Servo ' + num + ': ' + angle + '°');
-        }
-
         // Spray Aim Control
         function updateSprayAim(angle) {
             document.getElementById('sprayAimVal').textContent = angle + '°';
@@ -936,7 +893,7 @@ const char htmlPage[] PROGMEM = R"rawliteral(
 
         // Send initial positions
         setTimeout(() => {
-            sendJSON({ type: 'servo1', angle: 90 });
+            sendJSON({ type: 'sprayAim', angle: 90 });
             sendJSON({ type: 'drive', x: 0, y: 0 });
         }, 1000);
     </script>
@@ -1054,31 +1011,10 @@ void driveMotor(char direction) {
 // Servo Functions
 // ============================================================
 void initServos() {
-    servo1.attach(SERVO1_PIN);
-    servo3.attach(SERVO3_PIN);
     sprayAimServo.attach(SPRAY_AIM_PIN);
-
-    // Set initial positions
-    servo1.write(servo1Angle);
-    servo3.write(servo3Angle);
     sprayAimServo.write(sprayAimAngle);
-
     delay(500);
-}
-
-void setServoAngle(uint8_t servoNum, uint8_t angle) {
-    angle = constrain(angle, 0, 180);
-    switch (servoNum) {
-        case 1:
-            servo1Angle = angle;
-            servo1.write(angle);
-            break;
-        case 3:
-            servo3Angle = angle;
-            servo3.write(angle);
-            break;
-    }
-    Serial.printf("Servo %d set to %d\n", servoNum, angle);
+    Serial.println("Spray aim servo ready on GPIO 19");
 }
 
 void setSprayAim(int angle) {
@@ -1171,10 +1107,6 @@ void processJSONCommand(JsonDocument& doc) {
         int y = doc["y"];
         differentialDrive(x, y);
     }
-    else if (strcmp(type, "servo1") == 0) {
-        int angle = doc["angle"];
-        setServoAngle(1, angle);
-    }
     else if (strcmp(type, "sprayAim") == 0) {
         int angle = doc["angle"];
         setSprayAim(angle);
@@ -1241,15 +1173,7 @@ void processCommand(char* command) {
             setMotorRight(right);
         }
     }
-    // Servo commands: S1:angle, S3:angle, SA:angle (spray aim)
-    else if (strncmp(command, "S1:", 3) == 0) {
-        uint8_t angle = atoi(command + 3);
-        setServoAngle(1, angle);
-    }
-    else if (strncmp(command, "S3:", 3) == 0) {
-        uint8_t angle = atoi(command + 3);
-        setServoAngle(3, angle);
-    }
+    // Spray aim command: SA:angle
     else if (strncmp(command, "SA:", 3) == 0) {
         int angle = atoi(command + 3);
         setSprayAim(angle);
@@ -1307,8 +1231,6 @@ void handleNotFound() {
 void handleStatus() {
     String json = "{";
     json += "\"connected\":true,";
-    json += "\"servo1\":" + String(servo1Angle) + ",";
-    json += "\"servo3\":" + String(servo3Angle) + ",";
     json += "\"sprayAim\":" + String(sprayAimAngle) + ",";
     json += "\"motorLeft\":" + String(motorSpeedLeft) + ",";
     json += "\"motorRight\":" + String(motorSpeedRight) + ",";
@@ -1407,7 +1329,7 @@ void setup() {
     // Initialize Servos
     Serial.println("Initializing servos...");
     initServos();
-    Serial.println("Servos ready (servo1=GPIO18, servo3=GPIO21, sprayAim=GPIO19)");
+    Serial.println("Servos ready (sprayAim=GPIO19)");
 
     // Initialize Motor Driver
     Serial.println("Initializing drive motors...");
