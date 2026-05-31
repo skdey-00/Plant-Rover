@@ -71,13 +71,18 @@ _main_event_loop: Optional[asyncio.AbstractEventLoop] = None
 # ============================================================
 # YOLOv8 Model
 # ============================================================
-log.info(f"Loading YOLO model: {MODEL_PATH}")
-yolo_model = YOLO(MODEL_PATH)
-log.info("Model loaded successfully!")
-
-# Get class names for reference
-CLASS_NAMES = yolo_model.names
-log.info(f"Model classes ({len(CLASS_NAMES)}): {CLASS_NAMES}")
+try:
+    log.info(f"Loading YOLO model: {MODEL_PATH}")
+    yolo_model = YOLO(MODEL_PATH)
+    log.info("Model loaded successfully!")
+    CLASS_NAMES = yolo_model.names
+    log.info(f"Model classes ({len(CLASS_NAMES)}): {CLASS_NAMES}")
+except Exception as e:
+    log.error(f"FATAL: Failed to load YOLO model '{MODEL_PATH}': {e}")
+    log.error("Make sure the model file exists. For the trained plant detector, copy it to:")
+    log.error("  detection_server/../plant_rover_training/models/plant_detector.pt")
+    log.error("Or update MODEL_PATH in config.py to point to the correct file.")
+    raise SystemExit(1)
 
 
 # ============================================================

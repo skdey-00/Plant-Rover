@@ -642,8 +642,68 @@
         </div>
     </div>
 
-    <!-- nipple.js for virtual joystick -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
+    <!-- Built-in virtual joystick (no CDN dependency - works offline on rover WiFi) -->
+    <style>
+        .joystick-zone-outer {
+            width: 180px; height: 180px; border-radius: 50%;
+            background: rgba(30,58,95,0.5); position: relative;
+            border: 2px solid rgba(88,166,255,0.3);
+            margin: 0 auto; touch-action: none;
+        }
+        .joystick-zone-outer .knob {
+            width: 60px; height: 60px; border-radius: 50%;
+            background: radial-gradient(circle, #58a6ff 0%, #3a7bd5 100%);
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            cursor: grab; box-shadow: 0 0 10px rgba(88,166,255,0.5);
+            transition: box-shadow 0.1s;
+        }
+        .joystick-zone-outer .knob:active { cursor: grabbing; box-shadow: 0 0 20px rgba(88,166,255,0.8); }
+    </style>
+
+    <script>
+    // ============================================================
+    // Built-in Virtual Joystick (replaces nipple.js CDN)
+    // ============================================================
+    class VirtualJoystick {
+        constructor(containerEl, onMove, onEnd) {
+            this.el = containerEl;
+            this.knob = document.createElement('div');
+            this.knob.className = 'knob';
+            this.el.appendChild(this.knob);
+            this.active = false;
+            this.onMove = onMove || (() => {});
+            this.onEnd = onEnd || (() => {});
+            this._addListeners();
+        }
+        _addListeners() {
+            const start = (cx, cy) => { this.active = true; this._update(cx, cy); };
+            const move = (cx, cy) => { if (this.active) this._update(cx, cy); };
+            const end = () => {
+                if (!this.active) return;
+                this.active = false;
+                this.knob.style.transform = 'translate(-50%, -50%)';
+                this.onEnd();
+            };
+            this.el.addEventListener('mousedown', e => start(e.clientX, e.clientY));
+            this.el.addEventListener('touchstart', e => { e.preventDefault(); start(e.touches[0].clientX, e.touches[0].clientY); });
+            document.addEventListener('mousemove', e => move(e.clientX, e.clientY));
+            document.addEventListener('touchmove', e => { if (this.active) { e.preventDefault(); move(e.touches[0].clientX, e.touches[0].clientY); } });
+            document.addEventListener('mouseup', end);
+            document.addEventListener('touchend', end);
+        }
+        _update(cx, cy) {
+            const r = this.el.getBoundingClientRect();
+            const midX = r.left + r.width / 2, midY = r.top + r.height / 2;
+            const maxR = r.width / 2;
+            let dx = cx - midX, dy = cy - midY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > maxR) { dx = dx / dist * maxR; dy = dy / dist * maxR; }
+            this.knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+            this.onMove(dx / maxR, -dy / maxR);
+        }
+    }
+    </script>
 
     <script>
         // ============================================================
@@ -673,19 +733,10 @@
         // Auto-detect PC IP
         // ============================================================
         async function detectPcIp() {
-            try {
-                const response = await fetch('https://api.ipify.org?format=json');
-                const data = await response.json();
-                // This is the public IP, not local. For local, we'll use window.location
-                return;
-            } catch (e) {
-                // Fallback: use current hostname
-            }
-
-            // Use the current page's hostname for PC IP
-            // If opened as file://, use a default
+            // When connected to rover WiFi AP, there is no internet.
+            // Use the page's hostname (the PC server IP) directly.
             if (window.location.protocol === 'file:') {
-                PC_IP = '192.168.1.100'; // Default fallback
+                PC_IP = '192.168.4.2'; // Default: PC's IP on rover AP when serving from file
             } else {
                 PC_IP = window.location.hostname;
             }
@@ -856,36 +907,34 @@
         function initJoystick() {
             const zone = document.getElementById('joystick-zone');
 
-            const manager = nipplejs.create({
-                zone: zone,
-                mode: 'static',
-                position: { left: '50%', top: '50%' },
-                color: '#58a6ff',
-                size: 150
-            });
+            const joy = new VirtualJoystick(
+                zone,
+                // onMove: receives normalized x, y (-1 to 1)
+                (nx, ny) => {
+                    joystickData.x = Math.round(nx * 255);
+                    joystickData.y = Math.round(ny * 255);
+                },
+                // onEnd: joystick released
+                () => {
+                    joystickData.x = 0;
+                    joystickData.y = 0;
+                    sendDriveCommand();
+                    if (joystickInterval) {
+                        clearInterval(joystickInterval);
+                        joystickInterval = null;
+                    }
+                }
+            );
 
-            manager.on('start', () => {
-                // Start sending drive commands
+            // Poll drive commands at 50ms while joystick is active
+            // We need mousedown on the zone to start polling
+            zone.addEventListener('mousedown', () => {
                 if (joystickInterval) clearInterval(joystickInterval);
                 joystickInterval = setInterval(sendDriveCommand, 50);
             });
-
-            manager.on('move', (evt, data) => {
-                if (data.vector) {
-                    joystickData.x = Math.round(data.vector.x * 255);
-                    joystickData.y = Math.round(-data.vector.y * 255); // Invert Y
-                }
-            });
-
-            manager.on('end', () => {
-                joystickData.x = 0;
-                joystickData.y = 0;
-                sendDriveCommand();
-
-                if (joystickInterval) {
-                    clearInterval(joystickInterval);
-                    joystickInterval = null;
-                }
+            zone.addEventListener('touchstart', () => {
+                if (joystickInterval) clearInterval(joystickInterval);
+                joystickInterval = setInterval(sendDriveCommand, 50);
             });
         }
 

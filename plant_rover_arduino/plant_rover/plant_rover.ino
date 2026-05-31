@@ -586,7 +586,7 @@ void handleRoot() {
     html += "function updateServo(v){document.getElementById('servoVal').textContent=v;sendJSON({type:'servo1',angle:parseInt(v)});}";
     html += "function goHome(){document.getElementById('servoSlider').value=90;updateServo(90);}";
     html += "function spray(id){sendJSON({type:'spray',id:id});}";
-    html += "function toggleAuto(){sendJSON({type:'autoSpray',enabled:true});document.getElementById('autoStatus').textContent='ON';}";
+    html += "function toggleAuto(){var s=document.getElementById('autoStatus');var on=s.textContent==='OFF';sendJSON({type:'autoSpray',enabled:on});s.textContent=on?'ON':'OFF';}";
     html += "j.addEventListener('mousedown',function(e){joystickActive=true;updateJ(e);});";
     html += "j.addEventListener('touchstart',function(e){joystickActive=true;updateJ(e.touches[0]);e.preventDefault();});";
     html += "document.addEventListener('mousemove',function(e){if(joystickActive)updateJ(e);});";

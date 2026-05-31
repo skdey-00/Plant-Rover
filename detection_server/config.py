@@ -29,8 +29,11 @@ CONFIDENCE_THRESHOLD = 0.70
 # Class names that trigger auto-spray (partial match)
 TRIGGER_CLASSES = {"fungus", "pest", "disease", "blight", "mold"}
 
-# YOLOv8 model path (change to custom model after training)
-MODEL_PATH = "yolov8n.pt"
+# YOLOv8 model path — points to the trained plant detector by default
+# Falls back to yolov8n.pt (COCO pretrained) if the custom model is missing
+import os
+_CUSTOM_MODEL = os.path.join(os.path.dirname(__file__), '..', 'plant_rover_training', 'models', 'plant_detector.pt')
+MODEL_PATH = _CUSTOM_MODEL if os.path.exists(_CUSTOM_MODEL) else "yolov8n.pt"
 
 # Alternative models (uncomment to use):
 # MODEL_PATH = "yolov8s.pt"  # More accurate, slower

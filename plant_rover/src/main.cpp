@@ -5,7 +5,7 @@
  * - ESP32 WROOM
  * - 3x Servos on GPIO 18, 19, 21
  * - L298N Motor Driver:
- *   - IN1: GPIO 25, IN2: GPIO 26 (Motor A - Left)
+ *   - IN1: GPIO 22, IN2: GPIO 13 (Motor A - Left) [GPIO 25/26 broken on board]
  *   - IN3: GPIO 27, IN4: GPIO 14 (Motor B - Right)
  *   - ENA: GPIO 32 (PWM Left)
  *   - ENB: GPIO 33 (PWM Right)
@@ -57,10 +57,10 @@ int servo3Angle = 0;
 // ============================================================
 // Motor Driver (L298N) Configuration
 // ============================================================
-// Motor A (Left)
-const int MOTOR_A_IN1 = 25;
-const int MOTOR_A_IN2 = 26;
-const int MOTOR_A_ENA = 32;  // PWM
+// Motor A (Left) - GPIO 25→22, GPIO 26→13 (both were broken on board)
+const int MOTOR_A_IN1 = 22;   // Forward
+const int MOTOR_A_IN2 = 13;   // Backward
+const int MOTOR_A_ENA = 32;   // PWM
 
 // Motor B (Right)
 const int MOTOR_B_IN3 = 27;
@@ -69,8 +69,6 @@ const int MOTOR_B_ENB = 33;  // PWM
 
 const int PWM_FREQUENCY = 5000;
 const int PWM_RESOLUTION = 8;  // 8-bit = 0-255
-const int PWM_CHANNEL_A = 0;
-const int PWM_CHANNEL_B = 1;
 
 // Motor speed (0-255)
 int motorSpeedLeft = 0;
@@ -927,11 +925,9 @@ void initMotors() {
     pinMode(MOTOR_B_IN3, OUTPUT);
     pinMode(MOTOR_B_IN4, OUTPUT);
 
-    // PWM setup
-    ledcSetup(PWM_CHANNEL_A, PWM_FREQUENCY, PWM_RESOLUTION);
-    ledcSetup(PWM_CHANNEL_B, PWM_FREQUENCY, PWM_RESOLUTION);
-    ledcAttachPin(MOTOR_A_ENA, PWM_CHANNEL_A);
-    ledcAttachPin(MOTOR_B_ENB, PWM_CHANNEL_B);
+    // ESP32 Arduino Core 3.0+ LEDC API
+    ledcAttach(MOTOR_A_ENA, PWM_FREQUENCY, PWM_RESOLUTION);
+    ledcAttach(MOTOR_B_ENB, PWM_FREQUENCY, PWM_RESOLUTION);
 
     // Initial state - stopped
     stopMotors();
@@ -942,38 +938,38 @@ void stopMotors() {
     digitalWrite(MOTOR_A_IN2, LOW);
     digitalWrite(MOTOR_B_IN3, LOW);
     digitalWrite(MOTOR_B_IN4, LOW);
-    ledcWrite(PWM_CHANNEL_A, 0);
-    ledcWrite(PWM_CHANNEL_B, 0);
+    ledcWrite(MOTOR_A_ENA, 0);
+    ledcWrite(MOTOR_B_ENB, 0);
     motorSpeedLeft = 0;
     motorSpeedRight = 0;
 }
 
-void setMotor(int pwmChannel, int in1Pin, int in2Pin, int speed) {
+void setMotor(int pwmPin, int in1Pin, int in2Pin, int speed) {
     if (speed > 0) {
         digitalWrite(in1Pin, HIGH);
         digitalWrite(in2Pin, LOW);
-        ledcWrite(pwmChannel, speed);
+        ledcWrite(pwmPin, speed);
     } else if (speed < 0) {
         digitalWrite(in1Pin, LOW);
         digitalWrite(in2Pin, HIGH);
-        ledcWrite(pwmChannel, -speed);
+        ledcWrite(pwmPin, -speed);
     } else {
         digitalWrite(in1Pin, LOW);
         digitalWrite(in2Pin, LOW);
-        ledcWrite(pwmChannel, 0);
+        ledcWrite(pwmPin, 0);
     }
 }
 
 void setMotorLeft(int speed) {
     speed = constrain(speed, -255, 255);
     motorSpeedLeft = speed;
-    setMotor(PWM_CHANNEL_A, MOTOR_A_IN1, MOTOR_A_IN2, speed);
+    setMotor(MOTOR_A_ENA, MOTOR_A_IN1, MOTOR_A_IN2, speed);
 }
 
 void setMotorRight(int speed) {
     speed = constrain(speed, -255, 255);
     motorSpeedRight = speed;
-    setMotor(PWM_CHANNEL_B, MOTOR_B_IN3, MOTOR_B_IN4, speed);
+    setMotor(MOTOR_B_ENB, MOTOR_B_IN3, MOTOR_B_IN4, speed);
 }
 
 // Differential Steering: x=steer (-255 to 255), y=throttle (-255 to 255)
@@ -1093,25 +1089,9 @@ void triggerSpray(int id) {
 }
 
 void triggerSprayBoth() {
-    unsigned long now = millis();
-
-    // Rate limiting check
-    if (now - lastSprayTime < SPRAY_COOLDOWN_MS) {
-        unsigned long remaining = SPRAY_COOLDOWN_MS - (now - lastSprayTime);
-        Serial.printf("Spray on cooldown: %lu ms remaining\n", remaining);
-        return;
-    }
-
-    if (!sprayController2.isBusy() && !sprayController3.isBusy()) {
-        sprayController2.start(2);
-        // Stagger spray 3 by 200ms
-        delay(200);
-        sprayController3.start(3);
-        lastSprayTime = millis();
-        Serial.println("Both sprays triggered (staggered)");
-    } else {
-        Serial.println("Sprays busy - cannot trigger both");
-    }
+    // DEPRECATED: Use triggerSprayBothNonBlocking() instead.
+    // This function is kept for API compatibility but now uses non-blocking approach.
+    triggerSprayBothNonBlocking();
 }
 
 // Non-blocking staggered spray both (for use in main loop)

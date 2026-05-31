@@ -46,8 +46,9 @@ AUGMENTATIONS = [
     ("Rotate90", A.RandomRotate90(p=1.0)),
     ("GaussianBlur", A.GaussianBlur(blur_limit=3, p=1.0)),
     ("RandomCrop", A.RandomResizedCrop(
-        height_scale=0.9, width_scale=0.9,
-        height=None, width=None,
+        size=(600, 800),  # SVGA resolution (height, width)
+        scale=(0.9, 1.0),  # Crop 90-100% of original area
+        ratio=(0.75, 1.333),  # Aspect ratio range
         p=1.0
     )),
 ]
@@ -213,8 +214,13 @@ def augment_image_and_labels(
 
     # Apply each augmentation
     for aug_idx, (aug_name, transform) in enumerate(AUGMENTATIONS, 1):
-        # Apply augmentation
-        transformed = transform(image=image, bboxes=alb_boxes)
+        # Apply augmentation with bbox support
+        try:
+            transformed = transform(image=image, bboxes=alb_boxes,
+                                    bbox_params=A.BboxParams(format='pascal_voc', min_area=0.1))
+        except Exception:
+            # Fallback: try without explicit bbox_params (some transforms handle it internally)
+            transformed = transform(image=image, bboxes=alb_boxes)
         aug_image = transformed['image']
         aug_boxes = transformed['bboxes']
 
