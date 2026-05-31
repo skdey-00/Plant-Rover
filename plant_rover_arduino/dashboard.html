@@ -571,6 +571,27 @@
                 </div>
             </div>
 
+            <div class="servo-section" style="margin-top: 15px;">
+                <div class="panel-title" style="margin-bottom: 10px;">🎯 Spray Aim</div>
+                <div style="padding: 0 5px;">
+                    <input type="range" min="0" max="180" value="90" id="sprayAimSlider"
+                           oninput="sprayAimControl(this.value)"
+                           style="width: 100%; accent-color: var(--accent-blue);">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary);">
+                        <span>⬅ Left (0°)</span>
+                        <span id="sprayAimPos">90°</span>
+                        <span>Right (180°) ➡</span>
+                    </div>
+                    <div style="display: flex; gap: 5px; margin-top: 8px;">
+                        <button class="dpad-btn" onclick="setSprayAim(0)" style="flex:1;font-size:0.75rem;">⬅</button>
+                        <button class="dpad-btn" onclick="setSprayAim(45)" style="flex:1;font-size:0.75rem;">45°</button>
+                        <button class="dpad-btn" onclick="setSprayAim(90)" style="flex:1;font-size:0.75rem;">🏠</button>
+                        <button class="dpad-btn" onclick="setSprayAim(135)" style="flex:1;font-size:0.75rem;">135°</button>
+                        <button class="dpad-btn" onclick="setSprayAim(180)" style="flex:1;font-size:0.75rem;">➡</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- IP Config (for users to customize) -->
             <div class="config-section">
                 <div class="config-title">Configuration</div>
@@ -614,10 +635,10 @@
             <div class="panel-title">Spray Controls</div>
 
             <div class="spray-section">
-                <button class="spray-btn left" onclick="sprayControl(2)">
+                <button class="spray-btn left" onclick="sprayControl(1)">
                     🌿 Spray Left
                 </button>
-                <button class="spray-btn right" onclick="sprayControl(3)">
+                <button class="spray-btn right" onclick="sprayControl(2)">
                     🌿 Spray Right
                 </button>
                 <button class="spray-btn both" onclick="sprayControl('both')">
@@ -986,6 +1007,19 @@
                 type: 'servo1',
                 angle: servoAngle
             });
+        }
+
+        // ============================================================
+        // Spray Aim Control
+        // ============================================================
+        function sprayAimControl(angle) {
+            document.getElementById('sprayAimPos').textContent = angle + '°';
+            sendWebSocket({ type: 'sprayAim', angle: parseInt(angle) });
+        }
+
+        function setSprayAim(angle) {
+            document.getElementById('sprayAimSlider').value = angle;
+            sprayAimControl(angle);
         }
 
         // ============================================================

@@ -45,17 +45,31 @@ WebSocketsServer webSocket = WebSocketsServer(WS_PORT);
 // ============================================================
 // Servo Configuration
 // ============================================================
-const int SERVO1_PIN = 18;
-const int SERVO2_PIN = 19;
-const int SERVO3_PIN = 21;
+const int SERVO1_PIN = 18;  // General purpose servo
+const int SERVO3_PIN = 21;  // General purpose servo
 
 Servo servo1;
-Servo servo2;
 Servo servo3;
 
 int servo1Angle = 90;
-int servo2Angle = 0;
 int servo3Angle = 0;
+
+// ============================================================
+// Spray System Configuration
+// ============================================================
+// Spray Aim Servo (aims the spray assembly left/right)
+const int SPRAY_AIM_PIN = 19;
+Servo sprayAimServo;
+int sprayAimAngle = 90;  // 0=full left, 90=home/center, 180=full right
+
+// Spray BO Motor Driver (L298N #2 - dedicated to spray activation)
+const int SPRAY_IN1 = 5;   // Spray Motor A (left) direction
+const int SPRAY_IN2 = 23;  // Spray Motor A (left) direction
+const int SPRAY_ENA = 4;   // Spray Motor A (left) PWM speed
+const int SPRAY_IN3 = 16;  // Spray Motor B (right) direction
+const int SPRAY_IN4 = 17;  // Spray Motor B (right) direction
+const int SPRAY_ENB = 15;  // Spray Motor B (right) PWM speed
+const int SPRAY_MOTOR_SPEED = 255;  // Full speed for BO motors
 
 // ============================================================
 // Motor Driver (L298N) Configuration
@@ -89,75 +103,64 @@ bool previousPcOfflineState = false;
 
 unsigned long lastSprayTime = 0;
 const unsigned long SPRAY_COOLDOWN_MS = 5000;  // 5 seconds
+const unsigned long SPRAY_HOLD_TIME_MS = 800;  // BO motor run duration (ms)
 
 // ============================================================
-// Spray System State Machine
+// Spray System State Machine (BO Motor based)
 // ============================================================
-enum SprayState {
-    SPRAY_IDLE,
-    SPRAY_DEPLOY,
-    SPRAY_HOLD,
-    SPRAY_RETRACT
+enum SprayMotorState {
+    SPRAY_MOTOR_IDLE,
+    SPRAY_MOTOR_RUNNING
 };
 
-struct SprayController {
-    SprayState state;
-    unsigned long stateStartTime;
-    int servoNum;
-    bool active;
+struct SprayMotorController {
+    SprayMotorState state;
+    unsigned long startTime;
+    int motorId;  // 1=left, 2=right
 
-    SprayController() : state(SPRAY_IDLE), stateStartTime(0), servoNum(0), active(false) {}
+    SprayMotorController() : state(SPRAY_MOTOR_IDLE), startTime(0), motorId(0) {}
 
-    void start(int num) {
-        servoNum = num;
-        state = SPRAY_DEPLOY;
-        stateStartTime = millis();
-        active = true;
-    }
+    void start(int id) {
+        motorId = id;
+        state = SPRAY_MOTOR_RUNNING;
+        startTime = millis();
 
-    void update() {
-        if (!active) return;
-
-        unsigned long now = millis();
-
-        switch (state) {
-            case SPRAY_DEPLOY:
-                if (servoNum == 2 || servoNum == 3) {
-                    if (servoNum == 2) servo2.write(120);
-                    else servo3.write(120);
-                }
-                state = SPRAY_HOLD;
-                stateStartTime = now;
-                break;
-
-            case SPRAY_HOLD:
-                if (now - stateStartTime >= 800) {
-                    state = SPRAY_RETRACT;
-                }
-                break;
-
-            case SPRAY_RETRACT:
-                if (servoNum == 2 || servoNum == 3) {
-                    if (servoNum == 2) servo2.write(0);
-                    else servo3.write(0);
-                }
-                state = SPRAY_IDLE;
-                active = false;
-                break;
-
-            case SPRAY_IDLE:
-                active = false;
-                break;
+        if (motorId == 1) {
+            digitalWrite(SPRAY_IN1, HIGH);
+            digitalWrite(SPRAY_IN2, LOW);
+            ledcWrite(SPRAY_ENA, SPRAY_MOTOR_SPEED);
+        } else {
+            digitalWrite(SPRAY_IN3, HIGH);
+            digitalWrite(SPRAY_IN4, LOW);
+            ledcWrite(SPRAY_ENB, SPRAY_MOTOR_SPEED);
         }
     }
 
-    bool isBusy() const {
-        return active;
+    void update() {
+        if (state != SPRAY_MOTOR_RUNNING) return;
+        if (millis() - startTime >= SPRAY_HOLD_TIME_MS) {
+            stop();
+        }
     }
+
+    void stop() {
+        if (motorId == 1) {
+            digitalWrite(SPRAY_IN1, LOW);
+            digitalWrite(SPRAY_IN2, LOW);
+            ledcWrite(SPRAY_ENA, 0);
+        } else if (motorId == 2) {
+            digitalWrite(SPRAY_IN3, LOW);
+            digitalWrite(SPRAY_IN4, LOW);
+            ledcWrite(SPRAY_ENB, 0);
+        }
+        state = SPRAY_MOTOR_IDLE;
+    }
+
+    bool isBusy() const { return state != SPRAY_MOTOR_IDLE; }
 };
 
-SprayController sprayController2;
-SprayController sprayController3;
+SprayMotorController sprayMotorA;  // Left spray BO motor
+SprayMotorController sprayMotorB;  // Right spray BO motor
 bool autoSprayEnabled = false;
 
 // ============================================================
@@ -320,12 +323,12 @@ void driveMotor(char direction) {
 // ============================================================
 void initServos() {
     servo1.attach(SERVO1_PIN);
-    servo2.attach(SERVO2_PIN);
     servo3.attach(SERVO3_PIN);
+    sprayAimServo.attach(SPRAY_AIM_PIN);
 
     servo1.write(servo1Angle);
-    servo2.write(servo2Angle);
     servo3.write(servo3Angle);
+    sprayAimServo.write(sprayAimAngle);
 
     delay(500);
 }
@@ -337,10 +340,6 @@ void setServoAngle(uint8_t servoNum, uint8_t angle) {
             servo1Angle = angle;
             servo1.write(angle);
             break;
-        case 2:
-            servo2Angle = angle;
-            servo2.write(angle);
-            break;
         case 3:
             servo3Angle = angle;
             servo3.write(angle);
@@ -349,10 +348,36 @@ void setServoAngle(uint8_t servoNum, uint8_t angle) {
     Serial.printf("Servo %d set to %d\n", servoNum, angle);
 }
 
+void setSprayAim(int angle) {
+    sprayAimAngle = constrain(angle, 0, 180);
+    sprayAimServo.write(sprayAimAngle);
+    Serial.printf("Spray aim: %d deg\n", sprayAimAngle);
+}
+
 // ============================================================
-// Spray Functions
+// Spray Functions (BO Motor based)
 // ============================================================
-void triggerSpray(int id) {
+void initSprayMotors() {
+    pinMode(SPRAY_IN1, OUTPUT);
+    pinMode(SPRAY_IN2, OUTPUT);
+    pinMode(SPRAY_IN3, OUTPUT);
+    pinMode(SPRAY_IN4, OUTPUT);
+
+    ledcAttach(SPRAY_ENA, 5000, 8);
+    ledcAttach(SPRAY_ENB, 5000, 8);
+
+    // Ensure motors are off
+    digitalWrite(SPRAY_IN1, LOW);
+    digitalWrite(SPRAY_IN2, LOW);
+    digitalWrite(SPRAY_IN3, LOW);
+    digitalWrite(SPRAY_IN4, LOW);
+    ledcWrite(SPRAY_ENA, 0);
+    ledcWrite(SPRAY_ENB, 0);
+
+    Serial.println("Spray BO motors ready on L298N #2");
+}
+
+void triggerSpray(int motorId) {
     unsigned long now = millis();
 
     if (now - lastSprayTime < SPRAY_COOLDOWN_MS) {
@@ -361,18 +386,14 @@ void triggerSpray(int id) {
         return;
     }
 
-    if (id == 2) {
-        if (!sprayController2.isBusy()) {
-            sprayController2.start(2);
-            lastSprayTime = now;
-            Serial.println("Spray 2 triggered");
-        }
-    } else if (id == 3) {
-        if (!sprayController3.isBusy()) {
-            sprayController3.start(3);
-            lastSprayTime = now;
-            Serial.println("Spray 3 triggered");
-        }
+    if (motorId == 1 && !sprayMotorA.isBusy()) {
+        sprayMotorA.start(1);
+        lastSprayTime = now;
+        Serial.println("Spray motor A (left) triggered");
+    } else if (motorId == 2 && !sprayMotorB.isBusy()) {
+        sprayMotorB.start(2);
+        lastSprayTime = now;
+        Serial.println("Spray motor B (right) triggered");
     }
 }
 
@@ -388,23 +409,17 @@ void triggerSprayBothNonBlocking() {
         return;
     }
 
-    if (!sprayController2.isBusy() && !sprayController3.isBusy()) {
-        sprayController2.start(2);
-        sprayBothStartTime = now;
-        sprayBothPending = true;
+    if (!sprayMotorA.isBusy() && !sprayMotorB.isBusy()) {
+        sprayMotorA.start(1);
+        sprayMotorB.start(2);
         lastSprayTime = now;
-        Serial.println("Both sprays triggered");
+        Serial.println("Both spray motors triggered");
     }
 }
 
 void updateSpraySystem() {
-    sprayController2.update();
-    sprayController3.update();
-
-    if (sprayBothPending && (millis() - sprayBothStartTime >= 200)) {
-        sprayController3.start(3);
-        sprayBothPending = false;
-    }
+    sprayMotorA.update();
+    sprayMotorB.update();
 }
 
 // ============================================================
@@ -458,6 +473,10 @@ void processCommand(char* command) {
                 int angle = doc["angle"];
                 setServoAngle(1, angle);
             }
+            else if (strcmp(type, "sprayAim") == 0) {
+                int angle = doc["angle"];
+                setSprayAim(angle);
+            }
             else if (strcmp(type, "spray") == 0) {
                 if (doc["id"].is<int>()) {
                     int id = doc["id"];
@@ -501,13 +520,13 @@ void processCommand(char* command) {
         uint8_t angle = atoi(command + 3);
         setServoAngle(1, angle);
     }
-    else if (strncmp(command, "S2:", 3) == 0) {
-        uint8_t angle = atoi(command + 3);
-        setServoAngle(2, angle);
-    }
     else if (strncmp(command, "S3:", 3) == 0) {
         uint8_t angle = atoi(command + 3);
         setServoAngle(3, angle);
+    }
+    else if (strncmp(command, "SA:", 3) == 0) {
+        int angle = atoi(command + 3);
+        setSprayAim(angle);
     }
 }
 
@@ -554,16 +573,22 @@ void handleRoot() {
     html += "<button class='right' ontouchstart='sendDrive(1,0)' onmousedown='sendDrive(1,0)' ontouchend='stopDrive()' onmouseup='stopDrive()'>▶</button>";
     html += "<button class='down' ontouchstart='sendDrive(0,1)' onmousedown='sendDrive(0,1)' ontouchend='stopDrive()' onmouseup='stopDrive()'>▼</button>";
     html += "</div></div>";
-    // Servo Home
-    html += "<div class='card'><h2>🔧 Servo Home</h2>";
-    html += "<button class='btn btn-success' onclick='goHome()'>🏠 Home (90°)</button>";
-    html += "<div class='info'>Sets motors & spray to face forward</div>";
-    html += "<input type='range' class='slider' id='servoSlider' min='0' max='180' value='90' oninput='updateServo(this.value)' style='margin-top:15px'>";
-    html += "<div class='info'>Angle: <span id='servoVal'>90</span>°</div></div>";
-    // Spray
+    // Servo Control
+    html += "<div class='card'><h2>🔧 Servo Control</h2>";
+    html += "<input type='range' class='slider' id='servoSlider' min='0' max='180' value='90' oninput='updateServo(this.value)' style='width:100%'>";
+    html += "<div class='info'>Angle: <span id='servoVal'>90</span> deg</div>";
+    html += "<button class='btn btn-success' onclick='document.getElementById(\"servoSlider\").value=90;updateServo(90)'>🏠 Home (90)</button></div>";
+    // Spray Aim
+    html += "<div class='card'><h2>🎯 Spray Aim</h2>";
+    html += "<input type='range' class='slider' id='aimSlider' min='0' max='180' value='90' oninput='updateAim(this.value)' style='width:100%'>";
+    html += "<div class='info'>Aim: <span id='aimVal'>90</span> deg (0=left, 90=center, 180=right)</div>";
+    html += "<button class='btn btn-primary' onclick='aimPreset(0)'>⬅ Left</button>";
+    html += "<button class='btn btn-success' onclick='aimPreset(90)'>🏠 Home</button>";
+    html += "<button class='btn btn-primary' onclick='aimPreset(180)'>Right ➡</button></div>";
+    // Spray Activation
     html += "<div class='card'><h2>💨 Spray Controls</h2>";
-    html += "<button class='btn btn-primary' onclick='spray(2)'>🌿 Spray Left</button>";
-    html += "<button class='btn btn-primary' onclick='spray(3)'>🌿 Spray Right</button>";
+    html += "<button class='btn btn-primary' onclick='spray(1)'>🌿 Spray Left Motor</button>";
+    html += "<button class='btn btn-primary' onclick='spray(2)'>🌿 Spray Right Motor</button>";
     html += "<button class='btn btn-warning' onclick='spray(\"both\")'>💨 Spray Both</button>";
     html += "<div class='info' style='margin-top:15px'>Auto Spray: <span id='autoStatus'>OFF</span></div>";
     html += "<button class='btn btn-primary' style='margin-top:5px' onclick='toggleAuto()'>Toggle Auto Spray</button></div>";
@@ -584,7 +609,8 @@ void handleRoot() {
     html += "function sendDrive(x,y){sendJSON({type:'drive',x:x*255,y:y*255});document.getElementById('xVal').textContent=Math.round(x*255);document.getElementById('yVal').textContent=Math.round(y*255);}";
     html += "function stopDrive(){sendJSON({type:'drive',x:0,y:0});document.getElementById('xVal').textContent='0';document.getElementById('yVal').textContent='0';}";
     html += "function updateServo(v){document.getElementById('servoVal').textContent=v;sendJSON({type:'servo1',angle:parseInt(v)});}";
-    html += "function goHome(){document.getElementById('servoSlider').value=90;updateServo(90);}";
+    html += "function updateAim(v){document.getElementById('aimVal').textContent=v;sendJSON({type:'sprayAim',angle:parseInt(v)});}";
+    html += "function aimPreset(a){document.getElementById('aimSlider').value=a;updateAim(a);}";
     html += "function spray(id){sendJSON({type:'spray',id:id});}";
     html += "function toggleAuto(){var s=document.getElementById('autoStatus');var on=s.textContent==='OFF';sendJSON({type:'autoSpray',enabled:on});s.textContent=on?'ON':'OFF';}";
     html += "j.addEventListener('mousedown',function(e){joystickActive=true;updateJ(e);});";
@@ -605,11 +631,13 @@ void handleStatus() {
     String json = "{";
     json += "\"connected\":true,";
     json += "\"servo1\":" + String(servo1Angle) + ",";
-    json += "\"servo2\":" + String(servo2Angle) + ",";
     json += "\"servo3\":" + String(servo3Angle) + ",";
+    json += "\"sprayAim\":" + String(sprayAimAngle) + ",";
     json += "\"motorLeft\":" + String(motorSpeedLeft) + ",";
     json += "\"motorRight\":" + String(motorSpeedRight) + ",";
     json += "\"autoSprayEnabled\":" + String(autoSprayEnabled ? "true" : "false") + ",";
+    json += "\"sprayABusy\":" + String(sprayMotorA.isBusy() ? "true" : "false") + ",";
+    json += "\"sprayBBusy\":" + String(sprayMotorB.isBusy() ? "true" : "false") + ",";
     json += "\"pcOffline\":" + String(pcOffline ? "true" : "false") + ",";
     json += "\"ip\":\"" + WiFi.softAPIP().toString() + "\",";
     json += "\"rover_ip\":\"192.168.4.1\"";
@@ -691,12 +719,17 @@ void setup() {
     // Initialize Servos
     Serial.println("Initializing servos...");
     initServos();
-    Serial.println("Servos ready on GPIO 18, 19, 21");
+    Serial.println("Servos ready (servo1=GPIO18, servo3=GPIO21, sprayAim=GPIO19)");
 
     // Initialize Motors
     Serial.println("Initializing motor driver...");
     initMotors();
-    Serial.println("Motors ready");
+    Serial.println("Drive motors ready");
+
+    // Initialize Spray System
+    Serial.println("Initializing spray system...");
+    initSprayMotors();
+    Serial.println("Spray system ready (aim servo + BO motors on L298N #2)");
 
     // Setup WiFi Access Point
     Serial.println("\nSetting up WiFi Access Point...");
