@@ -543,6 +543,10 @@
                 <button class="mode-btn active" id="manualBtn" onclick="setMode('manual')">MANUAL</button>
                 <button class="mode-btn" id="autoBtn" onclick="setMode('auto')">AUTO</button>
             </div>
+            <div class="mode-toggle" style="margin-left: 10px;">
+                <button class="mode-btn active" id="annotatedBtn" onclick="setFeed('annotated')">YOLO</button>
+                <button class="mode-btn" id="rawBtn" onclick="setFeed('raw')">RAW</button>
+            </div>
         </div>
     </div>
 
@@ -560,20 +564,20 @@
             <div class="servo-section" style="margin-top: 15px;">
                 <div class="panel-title" style="margin-bottom: 10px;">🎯 Spray Aim</div>
                 <div style="padding: 0 5px;">
-                    <input type="range" min="0" max="180" value="90" id="sprayAimSlider"
+                    <input type="range" min="0" max="360" value="180" id="sprayAimSlider"
                            oninput="sprayAimControl(this.value)"
                            style="width: 100%; accent-color: var(--accent-blue);">
                     <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary);">
                         <span>⬅ Left (0°)</span>
-                        <span id="sprayAimPos">90°</span>
-                        <span>Right (180°) ➡</span>
+                        <span id="sprayAimPos">180°</span>
+                        <span>Right (360°) ➡</span>
                     </div>
                     <div style="display: flex; gap: 5px; margin-top: 8px;">
                         <button class="dpad-btn" onclick="setSprayAim(0)" style="flex:1;font-size:0.75rem;">⬅</button>
-                        <button class="dpad-btn" onclick="setSprayAim(45)" style="flex:1;font-size:0.75rem;">45°</button>
-                        <button class="dpad-btn" onclick="setSprayAim(90)" style="flex:1;font-size:0.75rem;">🏠</button>
-                        <button class="dpad-btn" onclick="setSprayAim(135)" style="flex:1;font-size:0.75rem;">135°</button>
-                        <button class="dpad-btn" onclick="setSprayAim(180)" style="flex:1;font-size:0.75rem;">➡</button>
+                        <button class="dpad-btn" onclick="setSprayAim(90)" style="flex:1;font-size:0.75rem;">90°</button>
+                        <button class="dpad-btn" onclick="setSprayAim(180)" style="flex:1;font-size:0.75rem;">🏠</button>
+                        <button class="dpad-btn" onclick="setSprayAim(270)" style="flex:1;font-size:0.75rem;">270°</button>
+                        <button class="dpad-btn" onclick="setSprayAim(360)" style="flex:1;font-size:0.75rem;">➡</button>
                     </div>
                 </div>
             </div>
@@ -597,6 +601,7 @@
                 <div class="video-overlay">
                     <div class="overlay-badge" id="fpsBadge">FPS: --</div>
                     <div class="overlay-badge" id="modeBadge">MODE: MANUAL</div>
+                    <div class="overlay-badge" id="feedBadge">FEED: YOLO</div>
                 </div>
             </div>
 
@@ -748,7 +753,6 @@
             }
 
             document.getElementById('pcIp').value = PC_IP;
-            updateStreamUrl();
         }
 
         // ============================================================
@@ -1078,12 +1082,38 @@
         // ============================================================
         // Video Stream
         // ============================================================
+        const ESP32CAM_IP = '192.168.4.3';
+        const ESP32CAM_PORT = 81;
+
         function updateStreamUrl() {
             if (!PC_IP) return;
-
-            const streamUrl = `http://${PC_IP}:${HTTP_PORT}/stream`;
+            // Default to raw ESP32-CAM stream (always works if camera is online)
             const img = document.getElementById('stream');
-            img.src = streamUrl;
+            if (currentFeed === 'annotated') {
+                img.src = `http://${PC_IP}:${HTTP_PORT}/annotated_stream`;
+            } else {
+                img.src = `http://${ESP32CAM_IP}:${ESP32CAM_PORT}/stream`;
+            }
+        }
+
+        // ============================================================
+        // Feed Toggle (Annotated vs Raw)
+        // ============================================================
+        let currentFeed = 'annotated';
+
+        function setFeed(feed) {
+            currentFeed = feed;
+            document.getElementById('annotatedBtn').classList.toggle('active', feed === 'annotated');
+            document.getElementById('rawBtn').classList.toggle('active', feed === 'raw');
+            document.getElementById('feedBadge').textContent = 'FEED: ' + (feed === 'annotated' ? 'YOLO' : 'RAW');
+
+            const img = document.getElementById('stream');
+            if (feed === 'annotated') {
+                img.src = `http://${PC_IP}:${HTTP_PORT}/annotated_stream`;
+            } else {
+                // Raw stream directly from ESP32-CAM (no detection server dependency)
+                img.src = `http://${ESP32CAM_IP}:${ESP32CAM_PORT}/stream`;
+            }
         }
 
         function videoLoaded() {
@@ -1093,8 +1123,16 @@
 
         function videoError() {
             console.error('Failed to load video stream');
-            document.getElementById('videoLoading').innerHTML =
-                '<span style="color: #f85149;">Stream Offline</span>';
+            // If annotated stream fails, fall back to raw ESP32-CAM stream
+            const img = document.getElementById('stream');
+            if (currentFeed === 'annotated') {
+                console.log('Annotated stream failed, falling back to raw ESP32-CAM stream');
+                img.src = `http://${ESP32CAM_IP}:${ESP32CAM_PORT}/stream`;
+                document.getElementById('feedBadge').textContent = 'FEED: RAW (fallback)';
+            } else {
+                document.getElementById('videoLoading').innerHTML =
+                    '<span style="color: #f85149;">Stream Offline</span>';
+            }
         }
 
         // ============================================================
@@ -1129,6 +1167,15 @@
 
             // Auto-detect PC IP
             await detectPcIp();
+
+            // Start with raw stream from ESP32-CAM (works immediately)
+            // User can switch to YOLO feed once detection thread is producing frames
+            const img = document.getElementById('stream');
+            img.src = `http://${ESP32CAM_IP}:${ESP32CAM_PORT}/stream`;
+            document.getElementById('feedBadge').textContent = 'FEED: RAW';
+            currentFeed = 'raw';
+            document.getElementById('rawBtn').classList.add('active');
+            document.getElementById('annotatedBtn').classList.remove('active');
 
             // Initialize components
             initJoystick();

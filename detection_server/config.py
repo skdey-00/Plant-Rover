@@ -10,9 +10,9 @@ Edit these values to customize the server behavior.
 SERVER_HOST = "0.0.0.0"
 SERVER_PORT = 5000
 
-# ESP32-CAM (Video source) — port 81 is the ESP32-CAM's stream server
-ESP32CAM_CAPTURE_URL = "http://192.168.4.2:81/capture"
-ESP32CAM_STREAM_URL = "http://192.168.4.2:81/stream"
+# ESP32-CAM (Video source) -- UPDATE to match the IP shown on ESP32-CAM Serial monitor
+ESP32CAM_CAPTURE_URL = "http://192.168.4.3:81/capture"
+ESP32CAM_STREAM_URL = "http://192.168.4.3:81/stream"
 
 # ESP32 Rover (Motor/servo control) — port 80 is the rover's HTTP server
 ESP32_ROVER_DETECTION_URL = "http://192.168.4.1/detection"
@@ -24,7 +24,7 @@ ESP32_ROVER_DETECTION_URL = "http://192.168.4.1/detection"
 FETCH_INTERVAL = 0.5
 
 # Confidence threshold for triggering spray
-CONFIDENCE_THRESHOLD = 0.70
+CONFIDENCE_THRESHOLD = 0.25
 
 # Class names that trigger auto-spray (partial match)
 TRIGGER_CLASSES = {"fungus", "pest", "disease", "blight", "mold"}
@@ -43,8 +43,8 @@ MODEL_PATH = _CUSTOM_MODEL if os.path.exists(_CUSTOM_MODEL) else "yolov8n.pt"
 # ============================================================
 # Advanced Configuration
 # ============================================================
-# inference size (larger = more accurate, slower)
-INFERENCE_SIZE = 640
+# inference size (must match training -- model was trained at 416)
+INFERENCE_SIZE = 416
 
 # Number of frame buffers for streaming
 FRAME_BUFFER_COUNT = 2

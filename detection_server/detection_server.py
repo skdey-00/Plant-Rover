@@ -65,6 +65,11 @@ latest_detections = []
 last_frame_time = 0.0
 detection_count = 0
 
+# Annotated frame buffer for MJPEG streaming (bounding boxes drawn)
+_annotated_lock = threading.Lock()
+_latest_annotated_jpeg = None  # bytes of the latest annotated JPEG
+_annotated_fps = 0.0
+
 # Reference to the running asyncio event loop (set during lifespan startup)
 _main_event_loop: Optional[asyncio.AbstractEventLoop] = None
 
@@ -127,12 +132,16 @@ sse_manager = SSEManager()
 # Detection Thread
 # ============================================================
 class DetectionThread(threading.Thread):
-    """Background thread that continuously fetches frames and runs inference."""
+    """Background thread that continuously fetches frames and runs inference.
+    
+    Uses the MJPEG stream from ESP32-CAM (not /capture) because the ESP32-CAM's
+    WebServer is single-threaded -- while a stream client is connected, /capture
+    requests get blocked.
+    """
 
     def __init__(self):
         super().__init__(daemon=True)
         self.running = True
-        self.sync_client = httpx.Client(timeout=10.0)
 
     def run(self):
         global detection_paused, latest_detections, detection_count, last_frame_time
@@ -144,123 +153,224 @@ class DetectionThread(threading.Thread):
                 with _state_lock:
                     paused = detection_paused
 
-                if not paused:
-                    start_time = time.time()
+                if paused:
+                    time.sleep(FETCH_INTERVAL)
+                    continue
 
-                    # Fetch frame from ESP32-CAM
-                    try:
-                        response = self.sync_client.get(ESP32CAM_CAPTURE_URL)
-                    except httpx.ConnectError:
-                        log.warning("Cannot connect to ESP32-CAM - retrying...")
-                        time.sleep(FETCH_INTERVAL * 2)
-                        continue
-                    except httpx.TimeoutException:
-                        log.warning("ESP32-CAM fetch timed out - retrying...")
-                        time.sleep(FETCH_INTERVAL)
-                        continue
-
-                    if response.status_code != 200:
-                        log.warning(f"Failed to fetch frame: HTTP {response.status_code}")
-                        time.sleep(FETCH_INTERVAL)
-                        continue
-
-                    # Decode JPEG to numpy array
-                    image_bytes = response.content
-                    nparr = np.frombuffer(image_bytes, np.uint8)
-                    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-                    if frame is None:
-                        log.warning("Failed to decode frame")
-                        time.sleep(FETCH_INTERVAL)
-                        continue
-
-                    # Run YOLO inference
-                    results = yolo_model(frame, verbose=False)
-
-                    # Process detections
-                    detections = []
-                    trigger_detections = []
-
-                    for result in results:
-                        boxes = result.boxes
-                        if boxes is not None:
-                            for box in boxes:
-                                cls_id = int(box.cls[0])
-                                conf = float(box.conf[0])
-                                cls_name = CLASS_NAMES[cls_id]
-
-                                detection = {
-                                    "class": cls_name,
-                                    "confidence": round(conf, 3),
-                                    "timestamp": datetime.utcnow().isoformat() + "Z"
-                                }
-                                detections.append(detection)
-
-                                # Check if this detection should trigger spray
-                                cls_lower = cls_name.lower()
-                                if (conf > CONFIDENCE_THRESHOLD and
-                                        any(trigger in cls_lower for trigger in TRIGGER_CLASSES)):
-                                    trigger_detections.append(detection)
-
-                    # Update shared state under lock
-                    with _state_lock:
-                        latest_detections = detections
-                        last_frame_time = time.time()
-                        detection_count += 1
-                        current_count = detection_count
-
-                    # Send to ESP32 rover for each triggered detection
-                    for det in trigger_detections:
-                        try:
-                            rover_response = self.sync_client.post(
-                                ESP32_ROVER_DETECTION_URL,
-                                json={
-                                    "label": det["class"],
-                                    "confidence": det["confidence"]
-                                },
-                                headers={"Content-Type": "application/json"}
-                            )
-                            log.info(f"Sent to rover: {det} -> HTTP {rover_response.status_code}")
-                        except Exception as e:
-                            log.warning(f"Failed to send to rover: {e}")
-
-                        # Broadcast SSE event (threadsafe)
-                        sse_manager.broadcast_threadsafe(json.dumps(det))
-
-                    # Log periodically
-                    if current_count % 10 == 0:
-                        elapsed = time.time() - start_time
-                        fps = 1.0 / max(elapsed, 0.001)
-                        log.info(
-                            f"Frame {current_count}: {len(detections)} detections, "
-                            f"{fps:.1f} FPS, paused={paused}"
-                        )
-
-                # Sleep between fetches
-                time.sleep(FETCH_INTERVAL)
+                # Connect to ESP32-CAM MJPEG stream and parse frames
+                self._consume_mjpeg_stream()
 
             except Exception as e:
                 log.error(f"Error in detection thread: {e}", exc_info=True)
-                time.sleep(FETCH_INTERVAL)
+                time.sleep(FETCH_INTERVAL * 2)
 
         log.info("Detection thread stopped")
+
+    def _consume_mjpeg_stream(self):
+        """Connect to the ESP32-CAM MJPEG stream and extract JPEG frames."""
+        stream_url = ESP32CAM_STREAM_URL
+        log.info(f"Connecting to MJPEG stream: {stream_url}")
+
+        try:
+            # Use httpx sync streaming to read the MJPEG stream
+            with httpx.stream("GET", stream_url, timeout=30.0) as response:
+                if response.status_code != 200:
+                    log.warning(f"Stream returned HTTP {response.status_code}")
+                    return
+
+                buffer = b""
+                in_frame = False
+
+                for chunk in response.iter_bytes(chunk_size=4096):
+                    if not self.running:
+                        break
+
+                    with _state_lock:
+                        paused = detection_paused
+
+                    if paused:
+                        continue
+
+                    buffer += chunk
+
+                    # Parse MJPEG frames from the buffer
+                    while True:
+                        if not in_frame:
+                            # Look for the start of a JPEG frame after boundary
+                            jpeg_start = buffer.find(b'\xff\xd8')
+                            if jpeg_start == -1:
+                                buffer = buffer[-4:]  # Keep last bytes in case of split marker
+                                break
+                            buffer = buffer[jpeg_start:]
+                            in_frame = True
+
+                        if in_frame:
+                            # Look for JPEG end marker
+                            jpeg_end = buffer.find(b'\xff\xd9')
+                            if jpeg_end == -1:
+                                # Need more data
+                                # Prevent buffer from growing unbounded
+                                if len(buffer) > 500000:
+                                    log.warning("MJPEG buffer too large, resetting")
+                                    buffer = b""
+                                    in_frame = False
+                                break
+
+                            # Extract the complete JPEG frame
+                            jpeg_data = buffer[:jpeg_end + 2]
+                            buffer = buffer[jpeg_end + 2:]
+                            in_frame = False
+
+                            # Process this frame
+                            self._process_frame(jpeg_data)
+
+        except httpx.ConnectError:
+            log.warning("Cannot connect to ESP32-CAM stream - retrying...")
+            time.sleep(FETCH_INTERVAL * 2)
+        except httpx.TimeoutException:
+            log.warning("ESP32-CAM stream timed out - reconnecting...")
+        except Exception as e:
+            log.error(f"MJPEG stream error: {e}")
+
+    def _process_frame(self, jpeg_data):
+        """Decode a JPEG frame, run YOLO, annotate, and update state."""
+        start_time = time.time()
+
+        # Decode JPEG to numpy array
+        nparr = np.frombuffer(jpeg_data, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        if frame is None:
+            return
+
+        # Run YOLO inference
+        results = yolo_model(frame, verbose=False, imgsz=INFERENCE_SIZE)
+
+        # ── Annotate frame with bounding boxes ──
+        annotated_frame = frame.copy()
+        for result in results:
+            boxes = result.boxes
+            if boxes is not None and len(boxes) > 0:
+                for box in boxes:
+                    cls_id = int(box.cls[0])
+                    conf = float(box.conf[0])
+                    cls_name = CLASS_NAMES[cls_id]
+
+                    # Bounding box coordinates
+                    x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+
+                    # Color based on class
+                    cls_lower = cls_name.lower()
+                    is_trigger = any(t in cls_lower for t in TRIGGER_CLASSES)
+                    if is_trigger and conf > CONFIDENCE_THRESHOLD:
+                        color = (0, 0, 255)    # Red = high-priority detection
+                        thickness = 3
+                    elif is_trigger:
+                        color = (0, 165, 255)   # Orange = low-confidence trigger
+                        thickness = 2
+                    else:
+                        color = (0, 255, 0)     # Green = normal detection
+                        thickness = 2
+
+                    # Draw bounding box
+                    cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, thickness)
+
+                    # Label with class name + confidence
+                    label_text = f"{cls_name} {conf:.1%}"
+                    font_scale = 0.6
+                    font_thickness = 1
+                    (tw, th), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
+                    # Background rectangle for text
+                    cv2.rectangle(annotated_frame, (x1, y1 - th - 10), (x1 + tw + 4, y1), color, -1)
+                    cv2.putText(annotated_frame, label_text, (x1 + 2, y1 - 5),
+                                cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), font_thickness, cv2.LINE_AA)
+
+        # Encode annotated frame as JPEG
+        encode_params = [cv2.IMWRITE_JPEG_QUALITY, 80]
+        ok, annotated_jpeg = cv2.imencode('.jpg', annotated_frame, encode_params)
+        if ok:
+            with _annotated_lock:
+                global _latest_annotated_jpeg
+                _latest_annotated_jpeg = annotated_jpeg.tobytes()
+
+        # Process detections
+        detections = []
+        trigger_detections = []
+
+        for result in results:
+            boxes = result.boxes
+            if boxes is not None:
+                for box in boxes:
+                    cls_id = int(box.cls[0])
+                    conf = float(box.conf[0])
+                    cls_name = CLASS_NAMES[cls_id]
+
+                    detection = {
+                        "class": cls_name,
+                        "confidence": round(conf, 3),
+                        "timestamp": datetime.utcnow().isoformat() + "Z"
+                    }
+                    detections.append(detection)
+
+                    # Check if this detection should trigger spray
+                    cls_lower = cls_name.lower()
+                    if (conf > CONFIDENCE_THRESHOLD and
+                            any(trigger in cls_lower for trigger in TRIGGER_CLASSES)):
+                        trigger_detections.append(detection)
+
+        # Update shared state under lock
+        with _state_lock:
+            global latest_detections, last_frame_time
+            latest_detections = detections
+            last_frame_time = time.time()
+            detection_count += 1
+            current_count = detection_count
+
+        # Send to ESP32 rover for each triggered detection
+        for det in trigger_detections:
+            try:
+                rover_response = httpx.post(
+                    ESP32_ROVER_DETECTION_URL,
+                    json={
+                        "label": det["class"],
+                        "confidence": det["confidence"]
+                    },
+                    headers={"Content-Type": "application/json"},
+                    timeout=5.0
+                )
+                log.info(f"Sent to rover: {det} -> HTTP {rover_response.status_code}")
+            except Exception as e:
+                log.warning(f"Failed to send to rover: {e}")
+
+            # Broadcast SSE event (threadsafe)
+            sse_manager.broadcast_threadsafe(json.dumps(det))
+
+        # Log periodically
+        if current_count % 10 == 0:
+            elapsed = time.time() - start_time
+            fps = 1.0 / max(elapsed, 0.001)
+            log.info(
+                f"Frame {current_count}: {len(detections)} detections, "
+                f"{fps:.1f} FPS, paused={paused}"
+            )
 
     def stop(self):
         self.running = False
 
 
-# Start detection thread
+# Create detection thread (started in lifespan startup to avoid double-start)
 detection_thread = DetectionThread()
-detection_thread.start()
-
 
 # ============================================================
 # FastAPI Lifespan
 # ============================================================
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app):
     global _main_event_loop
     _main_event_loop = asyncio.get_running_loop()
+
+    # Start the detection background thread
+    detection_thread.start()
 
     log.info(f"Detection server starting on {SERVER_HOST}:{SERVER_PORT}")
     log.info(f"Camera URL: {ESP32CAM_CAPTURE_URL}")
@@ -270,17 +380,28 @@ async def lifespan(app: FastAPI):
     detection_thread.stop()
     detection_thread.join(timeout=5)
 
-
 app = FastAPI(title="Plant Rover Detection Server", lifespan=lifespan)
+
+# Serve the dashboard HTML at root
+from fastapi.responses import HTMLResponse
+from pathlib import Path
+
+_DASHBOARD_PATH = Path(__file__).parent.parent / "plant_rover_arduino" / "dashboard.html"
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard():
+    if _DASHBOARD_PATH.exists():
+        return _DASHBOARD_PATH.read_text(encoding="utf-8")
+    return HTMLResponse("<h1>Dashboard not found</h1><p>Expected at plant_rover_arduino/dashboard.html</p>", status_code=404)
 
 
 # ============================================================
 # Endpoints
 # ============================================================
 
-@app.get("/")
+@app.get("/status")
 async def root():
-    """Root endpoint with server info."""
+    """Server status info."""
     with _state_lock:
         paused = detection_paused
         count = detection_count
@@ -288,7 +409,11 @@ async def root():
         "service": "Plant Rover Detection Server",
         "status": "running",
         "endpoints": {
-            "stream": "/stream",
+            "dashboard": "/ (HTML dashboard)",
+            "status": "/status (this JSON)",
+            "stream": "/stream (raw camera)",
+            "annotated_stream": "/annotated_stream (with bounding boxes)",
+            "annotated_capture": "/annotated_capture (single frame)",
             "events": "/events",
             "pause": "/pause (POST)",
             "resume": "/resume (POST)",
@@ -356,7 +481,7 @@ async def detection_events(request: Request):
 
 @app.get("/stream")
 async def proxy_stream():
-    """Proxy the ESP32-CAM MJPEG stream for single-origin access."""
+    """Proxy the raw ESP32-CAM MJPEG stream (no bounding boxes)."""
 
     async def generate():
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -372,6 +497,55 @@ async def proxy_stream():
         generate(),
         media_type="multipart/x-mixed-replace; boundary=frame"
     )
+
+
+@app.get("/annotated_stream")
+async def annotated_stream():
+    """MJPEG stream of annotated frames with YOLO bounding boxes drawn."""
+
+    boundary = "annotated_boundary"
+
+    async def generate():
+        while True:
+            with _annotated_lock:
+                jpeg_data = _latest_annotated_jpeg
+
+            if jpeg_data is None:
+                # No frame yet -- send a black placeholder
+                placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
+                cv2.putText(placeholder, "Waiting for camera...", (150, 250),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, (100, 100, 100), 2, cv2.LINE_AA)
+                ok, buf = cv2.imencode('.jpg', placeholder)
+                jpeg_data = buf.tobytes() if ok else b''
+
+            # MJPEG frame
+            frame_header = (
+                f"--{boundary}\r\n"
+                f"Content-Type: image/jpeg\r\n"
+                f"Content-Length: {len(jpeg_data)}\r\n"
+                f"\r\n"
+            ).encode()
+            yield frame_header + jpeg_data + b"\r\n"
+
+            # Wait before sending next frame (~10-15 FPS for annotated)
+            await asyncio.sleep(0.07)
+
+    return StreamingResponse(
+        generate(),
+        media_type=f"multipart/x-mixed-replace; boundary={boundary}",
+    )
+
+
+@app.get("/annotated_capture")
+async def annotated_capture():
+    """Single annotated JPEG snapshot with bounding boxes."""
+    with _annotated_lock:
+        jpeg_data = _latest_annotated_jpeg
+
+    if jpeg_data is None:
+        return JSONResponse({"error": "No annotated frame available yet"}, status_code=503)
+
+    return Response(content=jpeg_data, media_type="image/jpeg")
 
 
 @app.post("/detect")
@@ -399,7 +573,7 @@ async def manual_detect(request: Request):
             return JSONResponse({"error": "Failed to decode frame"}, status_code=500)
 
         # Run inference
-        results = yolo_model(frame, verbose=False)
+        results = yolo_model(frame, verbose=False, imgsz=INFERENCE_SIZE)
         detections = []
 
         for result in results:

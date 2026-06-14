@@ -50,16 +50,16 @@ WebSocketsServer webSocket = WebSocketsServer(WS_PORT);
 // Servo + Spray System Configuration
 // ============================================================
 // Single servo: spray assembly aim rotation
-const int SPRAY_AIM_PIN = 5;  // 0°=left, 90°=home, 180°=right
+const int SPRAY_AIM_PIN = 5;  // 0=left, 180=home, 360=right
 
-int sprayAimAngle = 90;  // 0=full left, 90=home/center, 180=full right
+int sprayAimAngle = 180;  // 0=full left, 180=home/center, 360=full right
 
 // Servo driven directly via LEDC PWM (50Hz, 16-bit)
 // No Servo library needed -- more reliable on ESP32
 #define SERVO_FREQ 50        // 50Hz = 20ms period
 #define SERVO_RES 16         // 16-bit resolution
 #define SERVO_MIN_US 500     // minimum pulse width (0 deg)
-#define SERVO_MAX_US 2500    // maximum pulse width (180 deg)
+#define SERVO_MAX_US 2500    // maximum pulse width (360 deg)
 
 // Spray BO Motor Driver (L298N #2 - dedicated to spray activation)
 // Single-direction: IN2/IN4 hardwired to GND on the L298N board
@@ -72,8 +72,9 @@ const int SPRAY_MOTOR_SPEED = 255;  // Full speed for BO motors
 // ============================================================
 // Motor Driver (L298N #1 - Drive) Configuration
 // ============================================================
-const int MOTOR_A_IN1 = 23;   // Left motor forward
-const int MOTOR_A_IN2 = 13;   // Left motor backward
+// Motor A (Left)
+const int MOTOR_A_IN1 = 23;   // Left motor direction A
+const int MOTOR_A_IN2 = 13;   // Left motor direction B
 const int MOTOR_A_ENA = 33;   // Left PWM
 
 // Motor B (Right)
@@ -323,9 +324,9 @@ void driveMotor(char direction) {
 // ============================================================
 // Servo Functions
 // ============================================================
-// Helper: convert angle (0-180) to LEDC duty cycle value
+// Helper: convert angle (0-360) to LEDC duty cycle value
 uint32_t angleToDuty(int angle) {
-    int pulseUs = map(angle, 0, 180, SERVO_MIN_US, SERVO_MAX_US);
+    int pulseUs = map(angle, 0, 360, SERVO_MIN_US, SERVO_MAX_US);
     // duty = pulseUs / periodUs * (2^res - 1)
     uint32_t duty = (uint32_t)((float)pulseUs * ((1 << SERVO_RES) - 1) / (1000000.0 / SERVO_FREQ));
     return duty;
@@ -336,11 +337,11 @@ void initServos() {
     ledcAttachPin(SPRAY_AIM_PIN, PWM_CH_SERVO);
     ledcWrite(PWM_CH_SERVO, angleToDuty(sprayAimAngle));
     delay(500);
-    Serial.println("Spray aim servo ready on GPIO 5 (direct LEDC)");
+    Serial.println("Spray aim servo ready on GPIO 5 (direct LEDC, 0-360 deg)");
 }
 
 void setSprayAim(int angle) {
-    sprayAimAngle = constrain(angle, 0, 180);
+    sprayAimAngle = constrain(angle, 0, 360);
     ledcWrite(PWM_CH_SERVO, angleToDuty(sprayAimAngle));
     Serial.printf("Spray aim: %d deg (duty=%u)\n", sprayAimAngle, angleToDuty(sprayAimAngle));
 }
@@ -552,11 +553,11 @@ void handleRoot() {
     html += "</div></div>";
     // Spray Aim
     html += "<div class='card'><h2>🎯 Spray Aim</h2>";
-    html += "<input type='range' class='slider' id='aimSlider' min='0' max='180' value='90' oninput='updateAim(this.value)' style='width:100%'>";
-    html += "<div class='info'>Aim: <span id='aimVal'>90</span> deg (0=left, 90=center, 180=right)</div>";
+    html += "<input type='range' class='slider' id='aimSlider' min='0' max='360' value='180' oninput='updateAim(this.value)' style='width:100%'>";
+    html += "<div class='info'>Aim: <span id='aimVal'>180</span> deg (0=left, 180=center, 360=right)</div>";
     html += "<button class='btn btn-primary' onclick='aimPreset(0)'>⬅ Left</button>";
-    html += "<button class='btn btn-success' onclick='aimPreset(90)'>🏠 Home</button>";
-    html += "<button class='btn btn-primary' onclick='aimPreset(180)'>Right ➡</button></div>";
+    html += "<button class='btn btn-success' onclick='aimPreset(180)'>🏠 Home</button>";
+    html += "<button class='btn btn-primary' onclick='aimPreset(360)'>Right ➡</button></div>";
     // Spray Activation
     html += "<div class='card'><h2>💨 Spray Controls</h2>";
     html += "<button class='btn btn-primary' onclick='spray(1)'>🌿 Spray Left Motor</button>";
